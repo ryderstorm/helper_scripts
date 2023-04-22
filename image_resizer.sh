@@ -23,7 +23,7 @@ desired_dimensions="2560x1080"
 usage() {
   echo "Usage: $0 [-t] [-d dimensions]"
   echo "  -t: Enable test mode (skip file conversion)"
-  echo "  -d dimensions: Set desired dimensions (default: 1920x1080)"
+  echo "  -d dimensions: Set desired dimensions (default: 2560x1080)"
   exit 1
 }
 
@@ -31,21 +31,36 @@ usage() {
 while getopts ":td:" opt; do
   case $opt in
     t) test_mode=1;;
-    d) desired_dimensions=$OPTARG;;
+    d)
+      if [[ $OPTARG =~ ^[0-9]+x[0-9]+$ ]]; then
+        desired_dimensions=$OPTARG
+      else
+        echo -e "${RED}Invalid dimensions format. Please use the format WIDTHxHEIGHT (e.g. 1920x1080).${NC}"
+        exit 1
+      fi
+      ;;
     \?) echo "Invalid option -$OPTARG" >&2; usage;;
     :) echo "Option -$OPTARG requires an argument" >&2; usage;;
   esac
 done
 
+# Check if there are image files in the current directory
+shopt -s nullglob
+image_files=( *.{jpg,jpeg,png} )
+if [ ${#image_files[@]} -eq 0 ]; then
+  echo -e "${RED}No image files found in current directory.${NC}"
+  exit 1
+fi
+
 if [ "$test_mode" == "1" ]; then
-  echo -e "${SPACER}${YELLOW}Running in test mode. No changes will be made to existing fils${NC}${SPACER}"
+  echo -e "${SPACER}${YELLOW}Running in test mode. No changes will be made to existing files.${NC}${SPACER}"
 else
   # Create originals directory if it doesn't exist
   mkdir -p originals
 fi
 
 # Loop through image files
-for image_file in *.{jpg,jpeg,png}; do
+for image_file in "${image_files[@]}"; do
   echo -e "\n${BLUE}$image_file${NC}"
   dimensions=$(identify -format '%wx%h' "$image_file")
   if [ "$dimensions" == "$desired_dimensions" ]; then
