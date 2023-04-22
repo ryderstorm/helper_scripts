@@ -52,6 +52,11 @@ if [ ${#image_files[@]} -eq 0 ]; then
   exit 1
 fi
 
+# Set counter variables
+changed_files=0
+skipped_files=0
+total_files=${#image_files[@]}
+
 if [ "$test_mode" == "1" ]; then
   echo -e "${SPACER}${YELLOW}Running in test mode. No changes will be made to existing files.${NC}${SPACER}"
 else
@@ -65,15 +70,23 @@ for image_file in "${image_files[@]}"; do
   dimensions=$(identify -format '%wx%h' "$image_file")
   if [ "$dimensions" == "$desired_dimensions" ]; then
     echo -e "${RED}Skipping image because it already has the correct dimensions of ${YELLOW}$desired_dimensions${NC}"
+    skipped_files=$((skipped_files+1))
   else
     extension="${image_file##*.}"
     filename="${image_file%.*}"
     echo -e "  ${WHITE}Converting image from original dimensions ${YELLOW}$dimensions${WHITE} to ${GREEN}$desired_dimensions${NC}"
     new_filename="${filename}___resized_to_${desired_dimensions}.${extension}"
     echo -e "  ${WHITE}New filename: ${CYAN}$new_filename${NC}"
+    changed_files=$((changed_files+1))
     if [ "$test_mode" != "1" ]; then
       convert "$image_file" -resize "$desired_dimensions" -background black -gravity center -extent "$desired_dimensions" "$new_filename"
       mv "$image_file" "originals/$image_file"
     fi
   fi
 done
+
+echo -e "${SPACER}"
+echo -e "${YELLOW}Summary:${NC}"
+echo -e "${BLUE}Total files:${NC} $total_files"
+echo -e "${GREEN}Changed files:${NC} $changed_files"
+echo -e "${CYAN}Skipped files:${NC} $skipped_files"
