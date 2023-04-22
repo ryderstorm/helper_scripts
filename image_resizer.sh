@@ -21,9 +21,10 @@ desired_dimensions="2560x1080"
 
 # Define usage function
 usage() {
-  echo "Usage: $0 [-t] [-d dimensions]"
+  echo "Usage: $0 [-t] [-d dimensions] [source_directory]"
   echo "  -t: Enable test mode (skip file conversion)"
   echo "  -d dimensions: Set desired dimensions (default: 2560x1080)"
+  echo "  source_directory: Set source directory (default: current directory)"
   exit 1
 }
 
@@ -44,11 +45,21 @@ while getopts ":td:" opt; do
   esac
 done
 
-# Check if there are image files in the current directory
+# Set source directory
+shift $((OPTIND -1))
+source_directory=${1:-.}
+
+# Check if source directory exists
+if [ ! -d "$source_directory" ]; then
+  echo -e "${RED}Source directory '$source_directory' does not exist.${NC}"
+  exit 1
+fi
+
+# Check if there are image files in the source directory
 shopt -s nullglob
-image_files=( *.{jpg,jpeg,png} )
+image_files=( "$source_directory"/*.{jpg,jpeg,png} )
 if [ ${#image_files[@]} -eq 0 ]; then
-  echo -e "${RED}No image files found in current directory.${NC}"
+  echo -e "${RED}No image files found in '$source_directory' directory.${NC}"
   exit 1
 fi
 
@@ -61,7 +72,7 @@ if [ "$test_mode" == "1" ]; then
   echo -e "${SPACER}${YELLOW}Running in test mode. No changes will be made to existing files.${NC}${SPACER}"
 else
   # Create originals directory if it doesn't exist
-  mkdir -p originals
+  mkdir -p "$source_directory/originals"
 fi
 
 # Loop through image files
@@ -79,8 +90,8 @@ for image_file in "${image_files[@]}"; do
     echo -e "  ${WHITE}New filename: ${CYAN}$new_filename${NC}"
     changed_files=$((changed_files+1))
     if [ "$test_mode" != "1" ]; then
-      convert "$image_file" -resize "$desired_dimensions" -background black -gravity center -extent "$desired_dimensions" "$new_filename"
-      mv "$image_file" "originals/$image_file"
+      convert "$image_file" -resize "$desired_dimensions" -background black -gravity center -extent "$desired_dimensions" "$source_directory/$new_filename"
+      mv "$image_file" "$source_directory/originals/$image_file"
     fi
   fi
 done
