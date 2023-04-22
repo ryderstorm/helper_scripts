@@ -47,10 +47,15 @@ print '✓'.green
 question = <<~QUESTION
   I need you to create a commit message for me based on these guidelines:
 
-    - Use the past tense for the commit message.
-    - Include a subject line and a body with a list of more details.
-    - Add a blank line followed by "Commit message created with help from ChatGPT." to the end of the body
-    - Don't output anything except the commit message contents so I can easily copy and paste it.
+  - Use the past tense for the commit message.
+  - Include a subject line and a body with a list of more details.
+  - The subject line should be followed by a blank line
+  - The subject line should be a single line that is 50 characters or less.
+  - If the changes only include 1 file, then the subject line should include the file name.
+  - The body should use bullets if appropriate.
+  - The lines in the body should wrap at 72 characters
+  - Add a blank line followed by "Commit message created with help from ChatGPT." to the end of the body
+  - Don't output anything except the commit message contents so I can easily copy and paste it.
 
   Here are the differences for the commit:
   ```#{staged_content}```
