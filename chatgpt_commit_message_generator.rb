@@ -28,8 +28,8 @@ OpenAI.configure do |config|
 end
 
 # Check if changes have been staged
-staged_changes = `git diff --name-only --cached`
-if staged_changes.empty?
+staged_content = `git --no-pager diff --staged --unified=1`
+if staged_content.empty?
   puts 'No changes have been staged. Please stage changes before running this script.'.red
   exit 1
 end
@@ -40,7 +40,6 @@ print 'Initializing OpenAI API client...'.white
 client = OpenAI::Client.new
 print '✓'.green
 
-staged_content = `git --no-pager diff --staged --unified=1`
 question = <<~QUESTION
   I need you to create a commit message for me based on these guidelines:
 
