@@ -101,3 +101,7 @@ echo -e "${YELLOW}Summary:${NC}"
 echo -e "${BLUE}Total files:${NC} $total_files"
 echo -e "${GREEN}Changed files:${NC} $changed_files"
 echo -e "${CYAN}Skipped files:${NC} $skipped_files"
+
+if [ "$test_mode" == "1" ]; then
+  echo -e "${SPACER}${YELLOW}Ran in test mode. No changes were made to existing files.${NC}${SPACER}"
+fi
