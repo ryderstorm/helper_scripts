@@ -27,6 +27,13 @@ OpenAI.configure do |config|
   config.access_token = OPENAI_API_KEY
 end
 
+# Check if changes have been staged
+staged_changes = `git diff --name-only --cached`
+if staged_changes.empty?
+  puts 'No changes have been staged. Please stage changes before running this script.'.red
+  exit 1
+end
+
 # Initialize OpenAI API client
 puts "\n------------------------------------------------------------".white
 print 'Initializing OpenAI API client...'.white
