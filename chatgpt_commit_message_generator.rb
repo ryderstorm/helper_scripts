@@ -1,5 +1,35 @@
 # frozen_string_literal: true
 
+# This script uses the OpenAI API to generate a commit message based on the
+# changes that have been staged. It then copies the commit message to the
+# clipboard and prompts the user to either submit the commit with the generated
+# message, edit the message before submitting, or exit without committing.
+#
+# You need to have an OpenAI API key to use this script.
+# You can get an API key by signing up for an OpenAI account at
+# https://beta.openai.com/.
+#
+# Requirements:
+#   - Ruby 2.6 or higher
+#   - Bundler
+#   - OpenAI API key set in OPENAI_API_KEY environment variable
+#
+# Usage:
+#  1. Stage changes you want to commit
+#  2. Run this script from the root of your git repository
+#  3. Follow the prompts provided by the script
+
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!! IMPORTANT !!! IMPORTANT !!! IMPORTANT !!! IMPORTANT !!! IMPORTANT !!!
+# This script sends your staged changes to the OpenAI API.
+# That means that your staged changes will be sent to OpenAI's servers.
+# Be careful not to run this script on any sensitive data.
+# Make sure you are complying with the rules and terms of use for
+# the codebase you are working on.
+#
+# Review OpenAI's Terms of Use at https://openai.com/policies/terms-of-use
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 require 'bundler/inline'
 
 gemfile do
