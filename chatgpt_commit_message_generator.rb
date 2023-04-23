@@ -34,11 +34,11 @@ require 'bundler/inline'
 
 gemfile do
   source 'https://rubygems.org'
-  gem 'clipboard', require: true
-  gem 'colorize', require: true
-  gem 'ruby-openai', require: false
-  gem 'pry', require: true
-  gem 'tty-prompt', require: true
+  gem 'clipboard', require: true # A gem for interacting with the clipboard
+  gem 'colorize', require: true # A gem for adding colors to the console output
+  gem 'ruby-openai', require: false # A gem for accessing the OpenAI API
+  gem 'pry', require: true # A gem for debugging
+  gem 'tty-prompt', require: true # A gem for displaying prompts in the console
 end
 
 require 'json'
@@ -74,6 +74,7 @@ print 'Initializing OpenAI API client...'.white
 client = OpenAI::Client.new
 print '✓'.green
 
+# Form the prompt for ChatGPT
 question = <<~QUESTION
   I need you to create a commit message for me based on these guidelines:
 
@@ -91,18 +92,25 @@ question = <<~QUESTION
   ```#{staged_content}```
 QUESTION
 
+# Send request to OpenAI API
 print "\nSubmitting request...".white
-
 response = client.chat(
   parameters: {
+    # The name of the OpenAI model to use
     model: 'gpt-3.5-turbo',
+    # The prompt to send to the model
     messages: [{ role: 'user', content: question }],
+    # Controls the randomness of the response.
+    # Lower values will result in more predictable responses.
+    # Range: [0, 1]
     temperature: 0.25
   }
 )
 print "✓\n".green
+
+# Extract the generated commit message from the response
 message = response['choices'][0]['message']['content']
-Clipboard.copy(message)
+Clipboard.copy(message) # Copy the generated commit message to the clipboard
 
 # End timer and display summary
 end_time = Time.now
@@ -115,6 +123,7 @@ puts message.cyan
 puts "\n--------------------------------------------------------------------------------".white
 
 begin
+  # Prompt the user for how to proceed
   user_input = prompt.select("\nWhat would you like to do?") do |menu|
     menu.enum '.'
 
@@ -123,12 +132,15 @@ begin
     menu.choice 'Exit without committing', 3
   end
 rescue SystemExit, Interrupt
-  # Ctrl-C or Ctrl-D
+  # Gracefully handle exceptions like Ctrl-C or Ctrl-D
   puts "\nExiting without committing...".yellow
   exit 1
 end
 
+# Escape double quotes in the commit message
 escaped_message = message.gsub('"', '\"')
+
+# Process the user's input
 case user_input
 when 1
   puts "\nSubmitting commit...".white
