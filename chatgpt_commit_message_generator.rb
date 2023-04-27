@@ -106,6 +106,13 @@ response = client.chat(
     temperature: 0.25
   }
 )
+
+# Check for errors in the response
+if response['error']
+  print "✗\n".red
+  puts "OpenAI API Error: #{response['error']}".red
+  exit 1
+end
 print "✓\n".green
 
 # Extract the generated commit message from the response
