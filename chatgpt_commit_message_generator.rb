@@ -79,14 +79,20 @@ question = <<~QUESTION
   I need you to create a commit message for me based on these guidelines:
 
   - Use the past tense for the commit message.
-  - Include a subject line and a body with a list of more details.
+  - Include a subject line and a body with a bulleted list of more details.
   - The subject line should be followed by a blank line
-  - The subject line should be a single line that is 50 characters or less.
+  - The subject line should be a single line that is no longer than 50 characters
   - If the changes only include 1 file, then the subject line should include the file name.
   - The body should use bullets if appropriate.
   - The lines in the body should wrap at 72 characters
-  - Add a blank line followed by "Commit message created with help from ChatGPT." to the end of the body
-  - Don't output anything except the commit message contents so I can easily copy and paste it.
+
+  Format your response as JSON with the following structure:
+  ```json
+  {
+    "subject": "<SUBJECT_LINE>",
+    "body": "<BODY>"
+  }
+  ```
 
   Here are the differences for the commit:
   ```#{staged_content}```
@@ -116,7 +122,15 @@ end
 print "✓\n".green
 
 # Extract the generated commit message from the response
-message = response['choices'][0]['message']['content']
+json_response = response['choices'][0]['message']['content']
+parsed_response = JSON.parse(json_response, object_class: OpenStruct)
+message = <<~MESSAGE
+  #{parsed_response.subject}
+
+  #{parsed_response.body}
+
+  Commit message created with help from ChatGPT.
+MESSAGE
 Clipboard.copy(message) # Copy the generated commit message to the clipboard
 
 # End timer and display summary
@@ -145,7 +159,7 @@ rescue SystemExit, Interrupt
 end
 
 # Escape double quotes in the commit message
-escaped_message = message.gsub('"', '\"')
+escaped_message = message.gsub('"', '\"').gsub('`', '\`')
 
 # Process the user's input
 case user_input
