@@ -157,6 +157,7 @@ begin
     menu.choice 'Submit commit with this message', 1
     menu.choice 'Edit message before committing', 2
     menu.choice 'Exit without committing', 3
+    menu.choice 'Start a debugger session', 4
   end
 rescue SystemExit, Interrupt
   # Gracefully handle exceptions like Ctrl-C or Ctrl-D
@@ -178,4 +179,8 @@ when 2
 when 3
   puts "\nExiting without committing...".yellow
   exit 1
+when 4
+  puts "\nStarting debugger session...".yellow
+  binding.pry
+  puts "\nExiting debugger session...".yellow
 end
