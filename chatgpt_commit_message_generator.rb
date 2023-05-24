@@ -36,15 +36,43 @@ gemfile do
   source 'https://rubygems.org'
   gem 'clipboard', require: true # A gem for interacting with the clipboard
   gem 'colorize', require: true # A gem for adding colors to the console output
-  gem 'ruby-openai', require: false # A gem for accessing the OpenAI API
+  gem 'httparty', require: true # A gem for making HTTP requests
   gem 'pry', require: true # A gem for debugging
   gem 'tty-prompt', require: true # A gem for displaying prompts in the console
 end
 
 require 'json'
-require 'openai'
 require 'ostruct'
 require 'time'
+
+def send_request_to_openai_api(question)
+  url = 'https://api.openai.com/v1/chat/completions'
+  headers = {
+    'Content-Type' => 'application/json',
+    'Authorization' => "Bearer #{OPENAI_API_KEY}"
+  }
+  body = {
+    "model": 'gpt-3.5-turbo',
+    "messages": [{ "role": 'user', "content": question }],
+    "temperature": 0.25
+  }
+  print 'Sending request to OpenAI API...'.white
+  response = nil
+  retries = 3
+  begin
+    response = HTTParty.post(url, headers: headers, body: body.to_json, timeout: 180)
+  rescue HTTParty::Error, Net::ReadTimeout => e
+    retries -= 1
+    raise e if retries.zero?
+
+    puts "\nRetry attempt #{3 - retries} of 3 failed!"
+    puts 'Encountered error while sending request to OpenAI API:'.yellow
+    puts "#{e.class}: #{e.message}".red
+    sleep rand(1..5)
+    retry
+  end
+  response
+end
 
 prompt = TTY::Prompt.new
 
@@ -54,10 +82,6 @@ if OPENAI_API_KEY.nil?
   exit 1
 end
 
-OpenAI.configure do |config|
-  config.access_token = OPENAI_API_KEY
-end
-
 # Check if changes have been staged
 staged_content = `git --no-pager diff --staged --unified=1`
 if staged_content.empty?
@@ -65,58 +89,54 @@ if staged_content.empty?
   exit 1
 end
 
+puts "\n--------------------------------------------------------------------------------".white
 # Start timer
 start_time = Time.now
-
-# Initialize OpenAI API client
-puts "\n--------------------------------------------------------------------------------".white
-print 'Initializing OpenAI API client...'.white
-client = OpenAI::Client.new
-print '✓'.green
 
 # Form the prompt for ChatGPT
 question = <<~QUESTION
   I need you to create a commit message for me based on these guidelines:
 
   - Use the past tense for the commit message.
-  - Include a subject line and a body with a list of more details.
+  - Include a subject line and a body with a bulleted list of more details.
   - The subject line should be followed by a blank line
-  - The subject line should be a single line that is 50 characters or less.
+  - The subject line should be a single line that is no longer than 50 characters
   - If the changes only include 1 file, then the subject line should include the file name.
   - The body should use bullets if appropriate.
   - The lines in the body should wrap at 72 characters
-  - Add a blank line followed by "Commit message created with help from ChatGPT." to the end of the body
-  - Don't output anything except the commit message contents so I can easily copy and paste it.
+
+  Format your response as JSON with the following structure:
+  ```json
+  {
+    "subject": "<SUBJECT_LINE>",
+    "body": "<BODY>"
+  }
+  ```
 
   Here are the differences for the commit:
   ```#{staged_content}```
 QUESTION
 
 # Send request to OpenAI API
-print "\nSubmitting request...".white
-response = client.chat(
-  parameters: {
-    # The name of the OpenAI model to use
-    model: 'gpt-3.5-turbo',
-    # The prompt to send to the model
-    messages: [{ role: 'user', content: question }],
-    # Controls the randomness of the response.
-    # Lower values will result in more predictable responses.
-    # Range: [0, 1]
-    temperature: 0.25
-  }
-)
+response = send_request_to_openai_api(question)
 
 # Check for errors in the response
 if response['error']
-  print "✗\n".red
-  puts "OpenAI API Error: #{response['error']}".red
+  print "✗\n\nOpenAI API Error: #{response['error']}\n".red
   exit 1
 end
 print "✓\n".green
 
 # Extract the generated commit message from the response
-message = response['choices'][0]['message']['content']
+json_response = response['choices'][0]['message']['content']
+parsed_response = JSON.parse(json_response, object_class: OpenStruct)
+message = <<~MESSAGE
+  #{parsed_response.subject}
+
+  #{parsed_response.body}
+
+  Commit message created with help from ChatGPT.
+MESSAGE
 Clipboard.copy(message) # Copy the generated commit message to the clipboard
 
 # End timer and display summary
@@ -137,6 +157,7 @@ begin
     menu.choice 'Submit commit with this message', 1
     menu.choice 'Edit message before committing', 2
     menu.choice 'Exit without committing', 3
+    menu.choice 'Start a debugger session', 4
   end
 rescue SystemExit, Interrupt
   # Gracefully handle exceptions like Ctrl-C or Ctrl-D
@@ -145,7 +166,7 @@ rescue SystemExit, Interrupt
 end
 
 # Escape double quotes in the commit message
-escaped_message = message.gsub('"', '\"')
+escaped_message = message.gsub('"', '\"').gsub('`', '\`')
 
 # Process the user's input
 case user_input
@@ -158,4 +179,8 @@ when 2
 when 3
   puts "\nExiting without committing...".yellow
   exit 1
+when 4
+  puts "\nStarting debugger session...".yellow
+  binding.pry
+  puts "\nExiting debugger session...".yellow
 end
