@@ -36,15 +36,43 @@ gemfile do
   source 'https://rubygems.org'
   gem 'clipboard', require: true # A gem for interacting with the clipboard
   gem 'colorize', require: true # A gem for adding colors to the console output
-  gem 'ruby-openai', require: false # A gem for accessing the OpenAI API
+  gem 'httparty', require: true # A gem for making HTTP requests
   gem 'pry', require: true # A gem for debugging
   gem 'tty-prompt', require: true # A gem for displaying prompts in the console
 end
 
 require 'json'
-require 'openai'
 require 'ostruct'
 require 'time'
+
+def send_request_to_openai_api(question)
+  url = 'https://api.openai.com/v1/chat/completions'
+  headers = {
+    'Content-Type' => 'application/json',
+    'Authorization' => "Bearer #{OPENAI_API_KEY}"
+  }
+  body = {
+    "model": 'gpt-3.5-turbo',
+    "messages": [{ "role": 'user', "content": question }],
+    "temperature": 0.25
+  }
+  print 'Sending request to OpenAI API...'.white
+  response = nil
+  retries = 3
+  begin
+    response = HTTParty.post(url, headers: headers, body: body.to_json, timeout: 180)
+  rescue HTTParty::Error, Net::ReadTimeout => e
+    retries -= 1
+    raise e if retries.zero?
+
+    puts "\nRetry attempt #{3 - retries} of 3 failed!"
+    puts 'Encountered error while sending request to OpenAI API:'.yellow
+    puts "#{e.class}: #{e.message}".red
+    sleep rand(1..5)
+    retry
+  end
+  response
+end
 
 prompt = TTY::Prompt.new
 
@@ -54,10 +82,6 @@ if OPENAI_API_KEY.nil?
   exit 1
 end
 
-OpenAI.configure do |config|
-  config.access_token = OPENAI_API_KEY
-end
-
 # Check if changes have been staged
 staged_content = `git --no-pager diff --staged --unified=1`
 if staged_content.empty?
@@ -65,14 +89,9 @@ if staged_content.empty?
   exit 1
 end
 
+puts "\n--------------------------------------------------------------------------------".white
 # Start timer
 start_time = Time.now
-
-# Initialize OpenAI API client
-puts "\n--------------------------------------------------------------------------------".white
-print 'Initializing OpenAI API client...'.white
-client = OpenAI::Client.new
-print '✓'.green
 
 # Form the prompt for ChatGPT
 question = <<~QUESTION
@@ -99,24 +118,11 @@ question = <<~QUESTION
 QUESTION
 
 # Send request to OpenAI API
-print "\nSubmitting request...".white
-response = client.chat(
-  parameters: {
-    # The name of the OpenAI model to use
-    model: 'gpt-3.5-turbo',
-    # The prompt to send to the model
-    messages: [{ role: 'user', content: question }],
-    # Controls the randomness of the response.
-    # Lower values will result in more predictable responses.
-    # Range: [0, 1]
-    temperature: 0.25
-  }
-)
+response = send_request_to_openai_api(question)
 
 # Check for errors in the response
 if response['error']
-  print "✗\n".red
-  puts "OpenAI API Error: #{response['error']}".red
+  print "✗\n\nOpenAI API Error: #{response['error']}\n".red
   exit 1
 end
 print "✓\n".green
