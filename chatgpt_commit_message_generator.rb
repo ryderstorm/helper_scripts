@@ -35,20 +35,6 @@
 # Setup and Functions
 # ==============================================================================
 
-OPENAI_URL = 'https://api.openai.com/v1/chat/completions'
-OPENAI_API_KEY = ENV['OPENAI_API_KEY']
-OPENAI_MODEL = ENV['OPENAI_MODEL']
-if OPENAI_API_KEY.nil? || OPENAI_MODEL.nil?
-  puts 'Please set the OPENAI_API_KEY and OPENAI_MODEL environment variables.'.red
-  exit 1
-end
-
-@staged_content = `git --no-pager diff --staged --unified=1`
-if @staged_content.empty?
-  puts 'No changes have been staged. Please stage changes before running this script.'.red
-  exit 1
-end
-
 require 'bundler/inline'
 
 gemfile do
@@ -64,29 +50,45 @@ require 'json'
 require 'ostruct'
 require 'time'
 
+OPENAI_URL = 'https://api.openai.com/v1/chat/completions'
+OPENAI_API_KEY = ENV['OPENAI_API_KEY']
+OPENAI_MODEL = ENV['OPENAI_MODEL']
+if OPENAI_API_KEY.nil? || OPENAI_MODEL.nil?
+  puts 'Please set the OPENAI_API_KEY and OPENAI_MODEL environment variables.'.red
+  exit 1
+end
+
+@staged_content = `git --no-pager diff --staged --unified=1`
+if @staged_content.empty?
+  puts 'No changes have been staged. Please stage changes before running this script.'.red
+  exit 1
+end
+
 def question
   <<~QUESTION
-    I need you to create a commit message for me based on these guidelines:
-
-    - Use the past tense for the commit message.
-    - Include a subject line and a body with a bulleted list of more details.
-    - The subject line should be followed by a blank line
-    - The subject line should be a single line that is no longer than 50 characters
-    - If the changes only include 1 file, then the subject line should include the file name.
-    - The body should use bullets if appropriate.
-    - The lines in the body should wrap at 72 characters
-
-    Format your response as JSON with the following structure:
-    ```json
-    {
-      "subject": "<SUBJECT_LINE>",
-      "body": "<BODY>"
-    }
-    ```
-
-    Here are the differences for the commit:
+    Create a commit message for based on these differences:
     ```#{@staged_content}```
   QUESTION
+end
+
+def chatgpt_function_definition
+  {
+    "name": 'commit_message',
+    "description": 'Create a commit message based on the changes that have been staged using the past tense.',
+    "parameters": {
+      "type": 'object',
+      "properties": {
+        "subject": {
+          "type": 'string',
+          "description": 'The subject line of the commit message. A single line that is no longer than 50 characters. If the changes only include 1 file, then the subject line should include the file name.'
+        },
+        "body": {
+          "type": 'string',
+          "description": 'The body of the commit message. Uses multiple lines with a bulleted list. Lines should wrap at 72 characters'
+        }
+      }
+    }
+  }
 end
 
 def headers
@@ -101,6 +103,7 @@ def message_body
   {
     "model": ENV['OPENAI_MODEL'],
     "messages": [{ "role": 'user', "content": formatted_question }],
+    "functions": [chatgpt_function_definition],
     "temperature": 0.25
   }.to_json
 end
@@ -135,13 +138,13 @@ begin
 
   # Check for errors in the response
   if response['error']
-    print "✗\n\nOpenAI API Error: #{response['error']}\n".red
+    print "✗\n\nOpenAI API Error:\n#{response['error']}\n".red
     exit 1
   end
   print "✓\n".green
 
   # Extract the generated commit message from the response
-  json_response = response['choices'][0]['message']['content']
+  json_response = response['choices'][0]['message']['function_call']['arguments']
   parsed_response = JSON.parse(json_response, object_class: OpenStruct)
 
   # Escape double quotes and tildes in the commit message
@@ -160,7 +163,7 @@ begin
   elapsed_time = end_time - start_time
   time_message = "\nTime to get message from ChatGPT: #{elapsed_time.round(2)} seconds"
   puts time_message.yellow
-  puts "\nThe commit message has been copied to your clipboard and is displayed below".magenta
+  puts "\nThe commit message has been copied to your clipboard and is displayed below:\n".magenta
   puts message.cyan
   puts "\n--------------------------------------------------------------------------------".white
 
