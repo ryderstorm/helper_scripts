@@ -21,9 +21,7 @@
 # =============================================================================
 
 set_brightness() {
-  output_file=/tmp/$(uuidgen).txt
-  sudo ddcutil setvcp 10 "$1" &> "$output_file"
-  output=$(cat "$output_file")
+  output=$(sudo ddcutil setvcp 10 "$1" 2>&1)
 }
 
 process_input() {
@@ -34,20 +32,25 @@ process_input() {
     exit 1
   fi
   get_current_brightness
-  if [ "$user_param" = "increase" ] && [ "$current_brightness" -le 100 ]; then
+  if [ "$user_param" = "increase" ]; then
     if [ "$current_brightness" -ge 90 ]; then
       new_brightness=100
     else
       new_brightness=$((current_brightness + 10))
     fi
-  elif [ "$user_param" = "decrease" ] && [ "$current_brightness" -ge 10 ]; then
+  elif [ "$user_param" = "decrease" ]; then
     if [ "$current_brightness" -le 20 ]; then
       new_brightness=10
     else
       new_brightness=$((current_brightness - 10))
     fi
-  else
+  elif [[ "$user_param" =~ ^[0-9]+$ ]] && [ "$user_param" -ge 30 ] && [ "$user_param" -le 100 ]; then
     new_brightness="$user_param"
+  else
+    message="Invalid parameter. It must be either 'increase', 'decrease', or a number from 30 to 100"
+    echo -e "\n${RED}$message${NC}"
+    notify-send "Brightness Control - Error" "$message"
+    exit 1
   fi
   echo "current_brightness: $current_brightness"
   echo "new_brightness: $new_brightness"
