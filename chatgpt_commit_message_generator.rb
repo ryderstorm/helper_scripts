@@ -66,7 +66,7 @@ end
 
 def question
   <<~QUESTION
-    Create a commit message for based on these differences:
+    Create a convnetional commit message based on these file changes:
     ```#{@staged_content}```
   QUESTION
 end
@@ -74,17 +74,17 @@ end
 def chatgpt_function_definition
   {
     "name": 'commit_message',
-    "description": 'Create a commit message based on the changes that have been staged using the past tense.',
+    "description": 'Create a conventional commit message based on the provided file changes.',
     "parameters": {
       "type": 'object',
       "properties": {
-        "subject": {
-          "type": 'string',
-          "description": 'The subject line of the commit message. A single line that is no longer than 50 characters. If the changes only include 1 file, then the subject line should include the file name.'
-        },
         "body": {
           "type": 'string',
-          "description": 'The body of the commit message. Uses multiple lines with a bulleted list. Lines should wrap at 72 characters'
+          "description": 'The body of the commit message. Uses multiple lines with a bulleted list. Lines wrap at 72 characters'
+        },
+        "subject": {
+          "type": 'string',
+          "description": "The subject line of the commit message. Briefly summarize the changes. Concise, under 50 characters. Follows conventional commit message format, so the message must start with `feat:`, `fix:`, `refactor:`, etc.. Does not use generic summaries like 'Updated files'. Does not include filenames in the subject line."
         }
       }
     }
