@@ -50,76 +50,76 @@ require 'json'
 require 'ostruct'
 require 'time'
 
-OPENAI_URL = 'https://api.openai.com/v1/chat/completions'
-OPENAI_API_KEY = ENV['OPENAI_API_KEY']
-OPENAI_MODEL = ENV['OPENAI_MODEL']
-if OPENAI_API_KEY.nil? || OPENAI_MODEL.nil?
-  puts 'Please set the OPENAI_API_KEY and OPENAI_MODEL environment variables.'.red
-  exit 1
-end
+class CommitMessageGenerator
+  OPENAI_URL = 'https://api.openai.com/v1/chat/completions'
+  OPENAI_API_KEY = ENV['OPENAI_API_KEY']
+  OPENAI_MODEL = ENV['OPENAI_MODEL']
 
-@staged_content = `git --no-pager diff --staged --unified=1`
-if @staged_content.empty?
-  puts 'No changes have been staged. Please stage changes before running this script.'.red
-  exit 1
-end
+  def initialize
+    @staged_content = `git --no-pager diff --staged --unified=1`
+    return unless @staged_content.empty?
 
-def question
-  <<~QUESTION
-    Create a convnetional commit message based on these file changes:
-    ```#{@staged_content}```
-  QUESTION
-end
+    puts 'No changes have been staged. Please stage changes before running this script.'.red
+    exit 1
+  end
 
-def chatgpt_function_definition
-  {
-    "name": 'commit_message',
-    "description": 'Create a conventional commit message based on the provided file changes.',
-    "parameters": {
-      "type": 'object',
-      "properties": {
-        "body": {
-          "type": 'string',
-          "description": 'The body of the commit message. Uses multiple lines with a bulleted list. Lines wrap at 72 characters'
-        },
-        "subject": {
-          "type": 'string',
-          "description": "The subject line of the commit message. Briefly summarize the changes. Concise, under 50 characters. Follows conventional commit message format, so the message must start with `feat:`, `fix:`, `refactor:`, etc.. Does not use generic summaries like 'Updated files'. Does not include filenames in the subject line."
+  def question
+    <<~QUESTION
+      Create a convnetional commit message based on these file changes:
+      ```#{@staged_content}```
+    QUESTION
+  end
+
+  def chatgpt_function_definition
+    {
+      "name": 'commit_message',
+      "description": 'Create a conventional commit message based on the provided file changes.',
+      "parameters": {
+        "type": 'object',
+        "properties": {
+          "body": {
+            "type": 'string',
+            "description": 'The body of the commit message. Uses multiple lines with a bulleted list. Lines wrap at 72 characters'
+          },
+          "subject": {
+            "type": 'string',
+            "description": "The subject line of the commit message. Briefly summarize the changes. Concise, under 50 characters. Follows conventional commit message format, so the message must start with `feat:`, `fix:`, `refactor:`, etc.. Does not use generic summaries like 'Updated files'. Does not include filenames in the subject line."
+          }
         }
       }
     }
-  }
-end
+  end
 
-def headers
-  {
-    'Content-Type' => 'application/json',
-    'Authorization' => "Bearer #{OPENAI_API_KEY}"
-  }
-end
+  def headers
+    {
+      'Content-Type' => 'application/json',
+      'Authorization' => "Bearer #{OPENAI_API_KEY}"
+    }
+  end
 
-def message_body
-  formatted_question = question.gsub("\n", ' ')
-  {
-    "model": ENV['OPENAI_MODEL'],
-    "messages": [{ "role": 'user', "content": formatted_question }],
-    "functions": [chatgpt_function_definition],
-    "temperature": 0.25
-  }.to_json
-end
+  def message_body
+    formatted_question = question.gsub("\n", ' ')
+    {
+      "model": ENV['OPENAI_MODEL'],
+      "messages": [{ "role": 'user', "content": formatted_question }],
+      "functions": [chatgpt_function_definition],
+      "temperature": 0.25
+    }.to_json
+  end
 
-def send_request_to_openai_api
-  print 'Sending request to OpenAI API...'.white
-  retries = 3
-  HTTParty.post(OPENAI_URL, headers: headers, body: message_body, timeout: 180)
-rescue HTTParty::Error, Net::ReadTimeout => e
-  retries -= 1
-  raise e if retries.zero?
+  def send_request_to_openai_api
+    print 'Sending request to OpenAI API...'.white
+    retries = 3
+    HTTParty.post(OPENAI_URL, headers: headers, body: message_body, timeout: 180)
+  rescue HTTParty::Error, Net::ReadTimeout => e
+    retries -= 1
+    raise e if retries.zero?
 
-  puts "\nAttempt #{3 - retries} of 3 failed:".yellow
-  puts "#{e.class}: #{e.message}".red
-  sleep rand(1..5)
-  retry
+    puts "\nAttempt #{3 - retries} of 3 failed:".yellow
+    puts "#{e.class}: #{e.message}".red
+    sleep rand(1..5)
+    retry
+  end
 end
 
 # ==============================================================================
@@ -134,7 +134,8 @@ begin
   start_time = Time.now
 
   # Send request to OpenAI API
-  response = send_request_to_openai_api
+  generator = CommitMessageGenerator.new
+  response = generator.send_request_to_openai_api
 
   # Check for errors in the response
   if response['error']
