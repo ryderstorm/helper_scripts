@@ -44,6 +44,7 @@ gemfile do
   gem 'httparty', require: true # A gem for making HTTP requests
   gem 'pry', require: true # A gem for debugging
   gem 'tty-prompt', require: true # A gem for displaying prompts in the console
+  gem 'tty-command', require: true # A gem for running shell commands
 end
 
 require 'json'
@@ -143,9 +144,10 @@ class ChatGPTGenerator
   attr_reader :api_key, :function_description, :function_properties, :function_question, :message, :model, :response,
               :response_obj
 
-  def initialize
+  def initialize(_args = nil)
     @api_key = ENV['OPENAI_API_KEY']
     @model = ENV['OPENAI_MODEL']
+    @cmd = TTY::Command.new(printer: :null)
     validate_required_variables
   end
 
@@ -237,8 +239,16 @@ class CommitMessageGenerator < ChatGPTGenerator
     @function_description = COMMIT_FUNCTION_DESCRIPTION
     @function_question = COMMIT_FUNCTION_QUESTION
 
-    @staged_content = `git --no-pager diff --staged --unified=1`
+    get_staged_content
     validate_staged_content
+  end
+
+  def get_staged_content
+    command = 'git diff --cached --unified=1'
+    result = @cmd.run!(command)
+    raise "Error: #{result.error}" if result.failure?
+
+    @staged_content = result.out
   end
 
   def question
@@ -289,8 +299,8 @@ class PRMessageGenerator < ChatGPTGenerator
     @current_branch = `git rev-parse --abbrev-ref HEAD`.strip
     validate_branches
     @commit_messages = `git --no-pager log --no-patch --pretty=format:"%n=-=-=-=-=-=-=-=-=-=-%n%h%n%s%n%b" \
-      #{source_branch}..#{target_branch}`
-    @code_changes = `git --no-pager diff --unified=1 #{source_branch}..#{target_branch}`
+      #{current_branch}..#{target_branch}`
+    @code_changes = `git --no-pager diff --unified=1 #{current_branch}..#{target_branch}`
     validate_code_changes
   end
 
@@ -342,9 +352,8 @@ end
 class UserInteractionHandler
   attr_reader :generator, :prompt, :message
 
-  def initialize(operation_type, target_branch = 'main')
+  def initialize(operation_type, target_branch)
     @prompt = TTY::Prompt.new
-
     case operation_type.downcase
     when 'commit'
       @generator = CommitMessageGenerator.new
