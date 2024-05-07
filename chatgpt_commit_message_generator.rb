@@ -140,7 +140,7 @@ end
 class ChatGPTGenerator
   include Constants
 
-  attr_reader :api_key, :function_description, :function_properties, :function_question, :model
+  attr_reader :api_key, :function_description, :function_properties, :function_question, :message, :model, :response
 
   def initialize
     @api_key = ENV['OPENAI_API_KEY']
@@ -177,9 +177,11 @@ class ChatGPTGenerator
   end
 
   def send_request_to_openai_api
+    @start_time = Time.now
     print 'Sending request to OpenAI API...'.white
     retries = 3
-    HTTParty.post(OPENAI_URL, headers: headers, body: message_body, timeout: 180)
+    @response = HTTParty.post(OPENAI_URL, headers: headers, body: message_body, timeout: 180)
+    @end_time = Time.now
   rescue HTTParty::Error, Net::ReadTimeout => e
     retries -= 1
     raise e if retries.zero?
@@ -190,12 +192,29 @@ class ChatGPTGenerator
     retry
   end
 
+  def display_summary
+    elapsed_time = @end_time - @start_time
+    time_message = "\nTime to get message from ChatGPT: #{elapsed_time.round(2)} seconds"
+    puts time_message.yellow
+    puts "\nThe commit message has been copied to your clipboard and is displayed below:\n".magenta
+    puts message.cyan
+    puts "\n--------------------------------------------------------------------------------".white
+  end
+
   private
 
   def validate_required_variables
     return unless api_key.nil? || model.nil?
 
     raise 'Please set the OPENAI_API_KEY and OPENAI_MODEL environment variables.'
+  end
+
+  def handle_api_errors(response)
+    if response['error']
+      puts "✗\n\nOpenAI API Error:\n#{response['error']}\n".red
+      exit 1
+    end
+    print "✓\n".green
   end
 end
 
@@ -218,6 +237,23 @@ class CommitMessageGenerator < ChatGPTGenerator
   def question
     base_question = function_question.sub('<-- STAGED CHANGES -->', staged_content)
     base_question.gsub("\n", ' ')
+  end
+
+  def display_summary
+    super
+    puts "\nWhat would you like to do with this commit message?".yellow
+  end
+
+  def extract_commit_message
+    json_response = response['choices'][0]['message']['function_call']['arguments']
+    parsed_response = JSON.parse(json_response, object_class: OpenStruct)
+    @message = <<~MESSAGE
+      #{parsed_response.subject}
+
+      #{parsed_response.body.gsub('"', '\"').gsub('`', "'")}
+
+    MESSAGE
+    Clipboard.copy(message)
   end
 end
 
@@ -277,12 +313,9 @@ class CommitMessageHandler
   end
 
   def handle_commit_message
-    start_time = Time.now
-    response = generator.send_request_to_openai_api
-    handle_api_errors(response)
-    extract_commit_message(response)
-    end_time = Time.now
-    display_summary(start_time, end_time)
+    generator.send_request_to_openai_api
+    generator.extract_commit_message
+    generator.display_summary
     handle_user_input
   rescue StandardError => e
     handle_error(e)
@@ -292,42 +325,14 @@ class CommitMessageHandler
 
   private
 
-  def handle_api_errors(response)
-    if response['error']
-      puts "✗\n\nOpenAI API Error:\n#{response['error']}\n".red
-      exit 1
-    end
-    print "✓\n".green
-  end
-
-  def extract_commit_message(response)
-    json_response = response['choices'][0]['message']['function_call']['arguments']
-    parsed_response = JSON.parse(json_response, object_class: OpenStruct)
-    @message = <<~MESSAGE
-      #{parsed_response.subject}
-
-      #{parsed_response.body.gsub('"', '\"').gsub('`', "'")}
-
-    MESSAGE
-    Clipboard.copy(message)
-  end
-
-  def display_summary(start_time, end_time)
-    elapsed_time = end_time - start_time
-    time_message = "\nTime to get message from ChatGPT: #{elapsed_time.round(2)} seconds"
-    puts time_message.yellow
-    puts "\nThe commit message has been copied to your clipboard and is displayed below:\n".magenta
-    puts message.cyan
-    puts "\n--------------------------------------------------------------------------------".white
-  end
-
   def handle_user_input
     user_input = prompt.select("\nWhat would you like to do?") do |menu|
       menu.enum '.'
       menu.choice 'Submit commit with this message', 1
       menu.choice 'Edit message before committing', 2
       menu.choice 'Exit without committing', 3
-      menu.choice 'Start a debugger session', 4
+      menu.choice 'Regenerate', 4
+      menu.choice 'Start a debugger session', 5
     end
 
     process_user_input(user_input)
@@ -337,13 +342,15 @@ class CommitMessageHandler
     case user_input
     when 1
       puts "\nSubmitting commit...".white
-      system("git commit -m \"#{message}\"")
+      system("git commit -m \"#{generator.message}\"")
     when 2
       puts "\nOpening editor...".white
-      system("git commit -e -m \"#{message}\"")
+      system("git commit -e -m \"#{generator.message}\"")
     when 3
       exit_gracefully
     when 4
+      handle_commit_message
+    when 5
       start_debugger
     end
   end
