@@ -50,13 +50,95 @@ require 'json'
 require 'ostruct'
 require 'time'
 
+module Constants
+  # OpenAI API Configuration
+  OPENAI_URL = 'https://api.openai.com/v1/chat/completions'
+  OPENAI_API_KEY = ENV['OPENAI_API_KEY']
+  OPENAI_MODEL = ENV['OPENAI_MODEL']
+
+  # Commit Message Generation
+  COMMIT_FUNCTION_DESCRIPTION = 'Generate a conventional commit message based on the staged changes.'
+  COMMIT_FUNCTION_PROPERTIES = {
+    "body": {
+      "type": 'string',
+      "description": 'The body of the commit message. Use multiple lines in a bulleted list to \
+              succintly describe the changes. Lines wrap at 72 characters'
+    },
+    "subject": {
+      "type": 'string',
+      "description": "The subject line of the commit message. Briefly summarize the changes. \
+              Concise, under 50 characters. Follows conventional commit message format, so the message \
+              must start with `feat:`, `fix:`, `refactor:`, etc.. Does not use generic summaries \
+              like 'Updated files'. Does not include filenames in the subject line."
+    }
+  }.freeze
+  COMMIT_FUNCTION_QUESTION = <<~QUESTION
+    Create a convnetional commit message based on these file changes:
+    ```shell
+    <-- STAGED CHANGES -->
+    ```
+  QUESTION
+
+  # Pull Request Template Generation
+  PR_FUNCTION_DESCRIPTION = 'Generate a title and description for a pull request based on the commit messages and the \
+    changes in the current branch compared to the target branch.'
+  PR_FUNCTION_PROPERTIES = {
+    "title": {
+      "type": 'string',
+      "description": 'The title of the pull request. Concise, under 50 characters. Must start with a conventional \
+              commit message prefix like `feat:`, `fix:`, `refactor:`, etc.'
+    },
+    "description": {
+      "type": 'string',
+      "description": 'The description of the pull request. Use multiple lines to describe the changes in detail. \
+              Include references to issues or other PRs if applicable.'
+    }
+  }.freeze
+  PR_FUNCTION_QUESTION = <<~QUESTION
+    Fill out a Pull Request template based on the changes and commits in the branch for the PR.
+
+    Here is the template:
+
+    ```markdown
+    ## Why?
+
+    <-- PARAPGRAH(S) DESCRIBING WHY THESE CHANGES ARE NECESSARY -->
+
+
+    ## What Changed?
+
+    <-- BULLETED LIST OF CHANGES MADE IN THE PR -->
+
+    ```
+
+    ---
+
+    Here are the commit messages for the PR:
+
+    ```shell
+
+    <-- COMMIT MESSAGES -->
+
+    ```
+
+    ---
+
+    Here are the code changes for the PR:
+
+    ```shell
+
+    <-- CODE CHANGES -->
+
+    ```
+
+  QUESTION
+end
+
 # This class sends a question to the OpenAI API and retrieves a response.
 # It is a base class that can be used to create other classes that interact
 # with the OpenAI API.
 class ChatGPTGenerator
-  OPENAI_URL = 'https://api.openai.com/v1/chat/completions'
-  OPENAI_API_KEY = ENV['OPENAI_API_KEY']
-  OPENAI_MODEL = ENV['OPENAI_MODEL']
+  include Constants
 
   attr_reader :api_key, :function_description, :function_properties, :function_question, :model
 
@@ -119,35 +201,13 @@ end
 
 # This class generates commit messages based on staged changes.
 class CommitMessageGenerator < ChatGPTGenerator
-  FUNCTION_DESCRIPTION = 'Generate a conventional commit message based on the staged changes.'
-  FUNCTION_PROPERTIES = {
-    "body": {
-      "type": 'string',
-      "description": 'The body of the commit message. Use multiple lines in a bulleted list to \
-              succintly describe the changes. Lines wrap at 72 characters'
-    },
-    "subject": {
-      "type": 'string',
-      "description": "The subject line of the commit message. Briefly summarize the changes. \
-              Concise, under 50 characters. Follows conventional commit message format, so the message \
-              must start with `feat:`, `fix:`, `refactor:`, etc.. Does not use generic summaries \
-              like 'Updated files'. Does not include filenames in the subject line."
-    }
-  }.freeze
-  FUNCTION_QUESTION = <<~QUESTION
-    Create a convnetional commit message based on these file changes:
-    ```shell
-    <-- STAGED CHANGES -->
-    ```
-  QUESTION
-
   attr_reader :staged_content
 
   def initialize
     super
-    @function_properties = FUNCTION_PROPERTIES
-    @function_description = FUNCTION_DESCRIPTION
-    @function_question = FUNCTION_QUESTION
+    @function_properties = COMMIT_FUNCTION_PROPERTIES
+    @function_description = COMMIT_FUNCTION_DESCRIPTION
+    @function_question = COMMIT_FUNCTION_QUESTION
 
     @staged_content = `git --no-pager diff --staged --unified=1`
     return unless @staged_content.empty?
@@ -156,7 +216,7 @@ class CommitMessageGenerator < ChatGPTGenerator
   end
 
   def question
-    base_question = FUNCTION_QUESTION.sub('<-- STAGED CHANGES -->', staged_content)
+    base_question = function_question.sub('<-- STAGED CHANGES -->', staged_content)
     base_question.gsub("\n", ' ')
   end
 end
@@ -165,66 +225,13 @@ end
 # It uses the commit messages and the changes in the in the current branch
 # compared to the target branch to generate the PR content.
 class PRMessageGenerator < ChatGPTGenerator
-  FUNCTION_DESCRIPTION = 'Generate a title and description for a pull request based on the commit messages and the \
-    changes in the current branch compared to the target branch.'
-  FUNCTION_PROPERTIES = {
-    "title": {
-      "type": 'string',
-      "description": 'The title of the pull request. Concise, under 50 characters. Must start with a conventional \
-              commit message prefix like `feat:`, `fix:`, `refactor:`, etc.'
-    },
-    "description": {
-      "type": 'string',
-      "description": 'The description of the pull request. Use multiple lines to describe the changes in detail. \
-              Include references to issues or other PRs if applicable.'
-    }
-  }.freeze
-  FUNCTION_QUESTION = <<~QUESTION
-    Fill out a Pull Request template based on the changes and commits in the branch for the PR.
-
-    Here is the template:
-
-    ```markdown
-    ## Why?
-
-    <-- PARAPGRAH(S) DESCRIBING WHY THESE CHANGES ARE NECESSARY -->
-
-
-    ## What Changed?
-
-    <-- BULLETED LIST OF CHANGES MADE IN THE PR -->
-
-    ```
-
-    ---
-
-    Here are the commit messages for the PR:
-
-    ```shell
-
-    <-- COMMIT MESSAGES -->
-
-    ```
-
-    ---
-
-    Here are the code changes for the PR:
-
-    ```shell
-
-    <-- CODE CHANGES -->
-
-    ```
-
-  QUESTION
-
   attr_reader :target_branch, :current_branch, :commit_messages, :code_changes
 
   def initialize(target_branch)
     super
-    @function_properties = FUNCTION_PROPERTIES
-    @function_description = FUNCTION_DESCRIPTION
-    @function_question = FUNCTION_QUESTION
+    @function_properties = PR_FUNCTION_PROPERTIES
+    @function_description = PR_FUNCTION_DESCRIPTION
+    @function_question = PR_FUNCTION_QUESTION
 
     @target_branch = target_branch
     @current_branch = `git rev-parse --abbrev-ref HEAD`.strip
@@ -344,6 +351,7 @@ class CommitMessageHandler
   def handle_error(e)
     puts "\nEncountered an error:".yellow
     puts "#{e.class}: #{e.message}".red
+    puts e.backtrace.join("\n").yellow
     binding.pry
     puts "\nExiting debugger session...".yellow
   end
