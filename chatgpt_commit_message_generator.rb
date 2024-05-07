@@ -50,10 +50,32 @@ require 'json'
 require 'ostruct'
 require 'time'
 
+# This class generates commit messages based on staged changes.
 class CommitMessageGenerator
   OPENAI_URL = 'https://api.openai.com/v1/chat/completions'
   OPENAI_API_KEY = ENV['OPENAI_API_KEY']
   OPENAI_MODEL = ENV['OPENAI_MODEL']
+  CHATGPT_FUNCTION_DEFINITION = {
+    "name": 'commit_message',
+    "description": 'Create a conventional commit message based on the provided file changes.',
+    "parameters": {
+      "type": 'object',
+      "properties": {
+        "body": {
+          "type": 'string',
+          "description": 'The body of the commit message. Use multiple lines in a bulleted list to \
+            succintly describe the changes. Lines wrap at 72 characters'
+        },
+        "subject": {
+          "type": 'string',
+          "description": "The subject line of the commit message. Briefly summarize the changes. \
+            Concise, under 50 characters. Follows conventional commit message format, so the message \
+            must start with `feat:`, `fix:`, `refactor:`, etc.. Does not use generic summaries \
+            like 'Updated files'. Does not include filenames in the subject line."
+        }
+      }
+    }
+  }.freeze
 
   def initialize
     @staged_content = `git --no-pager diff --staged --unified=1`
@@ -70,26 +92,6 @@ class CommitMessageGenerator
     QUESTION
   end
 
-  def chatgpt_function_definition
-    {
-      "name": 'commit_message',
-      "description": 'Create a conventional commit message based on the provided file changes.',
-      "parameters": {
-        "type": 'object',
-        "properties": {
-          "body": {
-            "type": 'string',
-            "description": 'The body of the commit message. Use multiple lines in a bulleted list to succintly describe the changes. Lines wrap at 72 characters'
-          },
-          "subject": {
-            "type": 'string',
-            "description": "The subject line of the commit message. Briefly summarize the changes. Concise, under 50 characters. Follows conventional commit message format, so the message must start with `feat:`, `fix:`, `refactor:`, etc.. Does not use generic summaries like 'Updated files'. Does not include filenames in the subject line."
-          }
-        }
-      }
-    }
-  end
-
   def headers
     {
       'Content-Type' => 'application/json',
@@ -102,7 +104,7 @@ class CommitMessageGenerator
     {
       "model": ENV['OPENAI_MODEL'],
       "messages": [{ "role": 'user', "content": formatted_question }],
-      "functions": [chatgpt_function_definition],
+      "functions": [CHATGPT_FUNCTION_DEFINITION],
       "temperature": 0.25
     }.to_json
   end
