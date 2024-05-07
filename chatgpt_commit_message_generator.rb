@@ -58,7 +58,7 @@ class ChatGPTGenerator
   OPENAI_API_KEY = ENV['OPENAI_API_KEY']
   OPENAI_MODEL = ENV['OPENAI_MODEL']
 
-  attr_reader :api_key, :function_description, :function_properties, :model
+  attr_reader :api_key, :function_description, :function_properties, :function_question, :model
 
   def initialize
     @api_key = ENV['OPENAI_API_KEY']
@@ -73,12 +73,10 @@ class ChatGPTGenerator
   end
 
   def message_body
-    formatted_question = question
-    functions = function_definition
     message = {
       "model": @model,
-      "messages": [{ "role": 'user', "content": formatted_question }],
-      "functions": [functions],
+      "messages": [{ "role": 'user', "content": question }],
+      "functions": [function_definition],
       "temperature": 0.25
     }
     message.to_json
@@ -126,8 +124,13 @@ class CommitMessageGenerator < ChatGPTGenerator
               must start with `feat:`, `fix:`, `refactor:`, etc.. Does not use generic summaries \
               like 'Updated files'. Does not include filenames in the subject line."
     }
-
   }.freeze
+  FUNCTION_QUESTION = <<~QUESTION
+    Create a convnetional commit message based on these file changes:
+    ```shell
+    <-- STAGED CHANGES -->
+    ```
+  QUESTION
 
   attr_reader :staged_content
 
@@ -143,11 +146,8 @@ class CommitMessageGenerator < ChatGPTGenerator
   end
 
   def question
-    new_question = <<~QUESTION
-      Create a convnetional commit message based on these file changes:
-      ```#{staged_content}```
-    QUESTION
-    new_question.gsub("\n", ' ')
+    base_question = FUNCTION_QUESTION.sub('<-- STAGED CHANGES -->', staged_content)
+    base_question.gsub("\n", ' ')
   end
 end
 
@@ -155,6 +155,102 @@ end
 # It uses the commit messages and the changes in the in the current branch
 # compared to the target branch to generate the PR content.
 class PRMessageGenerator < ChatGPTGenerator
+  FUNCTION_DESCRIPTION = 'Generate a title and description for a pull request based on the commit messages and the \
+    changes in the current branch compared to the target branch.'
+  FUNCTION_PROPERTIES = {
+    "title": {
+      "type": 'string',
+      "description": 'The title of the pull request. Concise, under 50 characters. Must start with a conventional \
+              commit message prefix like `feat:`, `fix:`, `refactor:`, etc.'
+    },
+    "description": {
+      "type": 'string',
+      "description": 'The description of the pull request. Use multiple lines to describe the changes in detail. \
+              Include references to issues or other PRs if applicable.'
+    }
+  }.freeze
+  FUNCTION_QUESTION = <<~QUESTION
+    Fill out a Pull Request template based on the changes and commits in the branch for the PR.
+
+    Here is the template:
+
+    ```markdown
+    ## Why?
+
+    <-- PARAPGRAH(S) DESCRIBING WHY THESE CHANGES ARE NECESSARY -->
+
+
+    ## What Changed?
+
+    <-- BULLETED LIST OF CHANGES MADE IN THE PR -->
+
+    ```
+
+    ---
+
+    Here are the commit messages for the PR:
+
+    ```shell
+
+    <-- COMMIT MESSAGES -->
+
+    ```
+
+    ---
+
+    Here are the code changes for the PR:
+
+    ```shell
+
+    <-- CODE CHANGES -->
+
+    ```
+
+  QUESTION
+
+  attr_reader :target_branch, :current_branch, :commit_messages, :code_changes
+
+  def initialize(target_branch)
+    super
+    @target_branch = target_branch
+    @current_branch = `git rev-parse --abbrev-ref HEAD`.strip
+    validate_branches
+    @commit_messages = `git --no-pager log --no-patch --pretty=format:"%n=-=-=-=-=-=-=-=-=-=-%n%h%n%s%n%b" \
+      #{source_branch}..#{target_branch}`
+    @code_changes = `git --no-pager diff --unified=1 #{source_branch}..#{target_branch}`
+    validate_code_changes
+    @function_properties = FUNCTION_PROPERTIES
+    @function_description = FUNCTION_DESCRIPTION
+    @function_question = FUNCTION_QUESTION
+  end
+
+  def question
+    base_question = function_question
+                    .sub('<-- COMMIT MESSAGES -->', commit_messages)
+                    .sub('<-- CODE CHANGES -->', code_changes)
+    base_question.gsub("\n", ' ')
+  end
+
+  private
+
+  def validate_branches
+    if current_branch.empty? || target_branch.empty?
+      puts 'Unable to determine the current branch or the target branch. Please check your git configuration.'.red
+      exit 1
+    end
+
+    return unless current_branch == target_branch
+
+    puts 'The current branch and the target branch are the same. Please provide a different target branch.'.red
+    exit 1
+  end
+
+  def validate_code_changes
+    return unless code_changes.empty? || commit_messages.empty?
+
+    puts 'Unable to determine the code changes or the commit messages. Please check your git configuration.'.red
+    exit 1
+  end
 end
 
 class CommitMessageHandler
