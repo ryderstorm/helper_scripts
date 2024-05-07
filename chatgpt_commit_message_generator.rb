@@ -63,6 +63,7 @@ class ChatGPTGenerator
   def initialize
     @api_key = ENV['OPENAI_API_KEY']
     @model = ENV['OPENAI_MODEL']
+    validate_required_variables
   end
 
   def headers
@@ -106,6 +107,14 @@ class ChatGPTGenerator
     sleep rand(1..5)
     retry
   end
+
+  private
+
+  def validate_required_variables
+    return unless api_key.nil? || model.nil?
+
+    raise 'Please set the OPENAI_API_KEY and OPENAI_MODEL environment variables.'
+  end
 end
 
 # This class generates commit messages based on staged changes.
@@ -136,13 +145,14 @@ class CommitMessageGenerator < ChatGPTGenerator
 
   def initialize
     super
-    @staged_content = `git --no-pager diff --staged --unified=1`
-    if @staged_content.empty?
-      puts 'No changes have been staged. Please stage changes before running this script.'.red
-      exit 1
-    end
     @function_properties = FUNCTION_PROPERTIES
     @function_description = FUNCTION_DESCRIPTION
+    @function_question = FUNCTION_QUESTION
+
+    @staged_content = `git --no-pager diff --staged --unified=1`
+    return unless @staged_content.empty?
+
+    raise 'No changes have been staged. Please stage changes before running this script.'.red
   end
 
   def question
@@ -212,6 +222,10 @@ class PRMessageGenerator < ChatGPTGenerator
 
   def initialize(target_branch)
     super
+    @function_properties = FUNCTION_PROPERTIES
+    @function_description = FUNCTION_DESCRIPTION
+    @function_question = FUNCTION_QUESTION
+
     @target_branch = target_branch
     @current_branch = `git rev-parse --abbrev-ref HEAD`.strip
     validate_branches
@@ -219,9 +233,6 @@ class PRMessageGenerator < ChatGPTGenerator
       #{source_branch}..#{target_branch}`
     @code_changes = `git --no-pager diff --unified=1 #{source_branch}..#{target_branch}`
     validate_code_changes
-    @function_properties = FUNCTION_PROPERTIES
-    @function_description = FUNCTION_DESCRIPTION
-    @function_question = FUNCTION_QUESTION
   end
 
   def question
@@ -235,21 +246,18 @@ class PRMessageGenerator < ChatGPTGenerator
 
   def validate_branches
     if current_branch.empty? || target_branch.empty?
-      puts 'Unable to determine the current branch or the target branch. Please check your git configuration.'.red
-      exit 1
+      raise 'Unable to determine the current branch or the target branch. Please check your git configuration.'
     end
 
     return unless current_branch == target_branch
 
-    puts 'The current branch and the target branch are the same. Please provide a different target branch.'.red
-    exit 1
+    raise 'The current branch and the target branch are the same. Please provide a different target branch.'
   end
 
   def validate_code_changes
     return unless code_changes.empty? || commit_messages.empty?
 
-    puts 'Unable to determine the code changes or the commit messages. Please check your git configuration.'.red
-    exit 1
+    raise 'Unable to determine the code changes or the commit messages. Please check your git configuration.'
   end
 end
 
