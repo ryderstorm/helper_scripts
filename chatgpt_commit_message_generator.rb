@@ -140,13 +140,49 @@ end
 class ChatGPTGenerator
   include Constants
 
-  attr_reader :api_key, :function_description, :function_properties, :function_question, :message, :model, :response
+  attr_reader :api_key, :function_description, :function_properties, :function_question, :message, :model, :response,
+              :response_obj
 
   def initialize
     @api_key = ENV['OPENAI_API_KEY']
     @model = ENV['OPENAI_MODEL']
     validate_required_variables
   end
+
+  def generate_messages
+    send_request_to_openai_api
+    extract_message_from_response
+    display_summary
+  end
+
+  def send_request_to_openai_api
+    @start_time = Time.now
+    print 'Sending request to OpenAI API...'.white
+    retries = 3
+    @response = HTTParty.post(OPENAI_URL, headers: headers, body: message_body, timeout: 180)
+    @end_time = Time.now
+  rescue HTTParty::Error, Net::ReadTimeout => e
+    retries -= 1
+    raise e if retries.zero?
+
+    puts "\nAttempt #{3 - retries} of 3 failed:".yellow
+    puts "#{e.class}: #{e.message}".red
+    sleep rand(1..5)
+    retry
+  end
+
+  def extract_message_from_response
+    json_response = response['choices'][0]['message']['function_call']['arguments']
+    @response_obj = JSON.parse(json_response, object_class: OpenStruct)
+  end
+
+  def display_summary
+    elapsed_time = @end_time - @start_time
+    time_message = "\nTime to get message from ChatGPT: #{elapsed_time.round(2)} seconds"
+    puts time_message.yellow
+  end
+
+  private
 
   def headers
     {
@@ -175,33 +211,6 @@ class ChatGPTGenerator
       }
     }
   end
-
-  def send_request_to_openai_api
-    @start_time = Time.now
-    print 'Sending request to OpenAI API...'.white
-    retries = 3
-    @response = HTTParty.post(OPENAI_URL, headers: headers, body: message_body, timeout: 180)
-    @end_time = Time.now
-  rescue HTTParty::Error, Net::ReadTimeout => e
-    retries -= 1
-    raise e if retries.zero?
-
-    puts "\nAttempt #{3 - retries} of 3 failed:".yellow
-    puts "#{e.class}: #{e.message}".red
-    sleep rand(1..5)
-    retry
-  end
-
-  def display_summary
-    elapsed_time = @end_time - @start_time
-    time_message = "\nTime to get message from ChatGPT: #{elapsed_time.round(2)} seconds"
-    puts time_message.yellow
-    puts "\nThe commit message has been copied to your clipboard and is displayed below:\n".magenta
-    puts message.cyan
-    puts "\n--------------------------------------------------------------------------------".white
-  end
-
-  private
 
   def validate_required_variables
     return unless api_key.nil? || model.nil?
@@ -237,21 +246,22 @@ class CommitMessageGenerator < ChatGPTGenerator
     base_question.gsub("\n", ' ')
   end
 
-  def display_summary
+  def extract_message_from_response
     super
-    puts "\nWhat would you like to do with this commit message?".yellow
-  end
-
-  def extract_commit_message
-    json_response = response['choices'][0]['message']['function_call']['arguments']
-    parsed_response = JSON.parse(json_response, object_class: OpenStruct)
     @message = <<~MESSAGE
-      #{parsed_response.subject}
+      #{response_obj.subject}
 
-      #{parsed_response.body.gsub('"', '\"').gsub('`', "'")}
+      #{response_obj.body.gsub('"', '\"').gsub('`', "'")}
 
     MESSAGE
     Clipboard.copy(message)
+  end
+
+  def display_summary
+    super
+    puts "\nThe commit message has been copied to your clipboard and is displayed below:\n".magenta
+    puts message.cyan
+    puts "\n--------------------------------------------------------------------------------".white
   end
 
   private
@@ -291,6 +301,25 @@ class PRMessageGenerator < ChatGPTGenerator
     base_question.gsub("\n", ' ')
   end
 
+  def extract_message_from_response
+    super
+    @message = <<~MESSAGE
+      PR Title: #{response_obj.title}
+
+      PR Description:
+      #{response_obj.description}
+
+    MESSAGE
+    Clipboard.copy(message)
+  end
+
+  def display_summary
+    super
+    puts "\nThe PR description has been copied to your clipboard. The PR title and description are displayed below:\n".magenta
+    puts message.cyan
+    puts "\n--------------------------------------------------------------------------------".white
+  end
+
   private
 
   def validate_branches
@@ -310,18 +339,24 @@ class PRMessageGenerator < ChatGPTGenerator
   end
 end
 
-class CommitMessageHandler
+class UserInteractionHandler
   attr_reader :generator, :prompt, :message
 
-  def initialize
-    @generator = CommitMessageGenerator.new
+  def initialize(operation_type, target_branch = 'main')
     @prompt = TTY::Prompt.new
+
+    case operation_type.downcase
+    when 'commit'
+      @generator = CommitMessageGenerator.new
+    when 'pr'
+      @generator = PRMessageGenerator.new(target_branch)
+    else
+      raise "Invalid operation type: [#{operation_type}]. Please provide a valid operation type."
+    end
   end
 
-  def handle_commit_message
-    generator.send_request_to_openai_api
-    generator.extract_commit_message
-    generator.display_summary
+  def run_generator
+    generator.generate_messages
     handle_user_input
   rescue StandardError => e
     handle_error(e)
@@ -355,7 +390,7 @@ class CommitMessageHandler
     when 3
       exit_gracefully
     when 4
-      handle_commit_message
+      run_generator
     when 5
       start_debugger
     end
@@ -381,6 +416,12 @@ class CommitMessageHandler
   end
 end
 
-# Use the new class in your main script
-handler = CommitMessageHandler.new
-handler.handle_commit_message
+# ==============================================================================
+# Main Script
+# ==============================================================================
+
+operation_type = ARGV[0] # Get operation type from command line argument
+target_branch = ARGV[1] # Get target branch from command line argument
+handler = UserInteractionHandler.new(operation_type, target_branch)
+
+handler.run_generator
