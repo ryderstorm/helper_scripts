@@ -229,9 +229,7 @@ class CommitMessageGenerator < ChatGPTGenerator
     @function_question = COMMIT_FUNCTION_QUESTION
 
     @staged_content = `git --no-pager diff --staged --unified=1`
-    return unless @staged_content.empty?
-
-    raise 'No changes have been staged. Please stage changes before running this script.'.red
+    validate_staged_content
   end
 
   def question
@@ -254,6 +252,14 @@ class CommitMessageGenerator < ChatGPTGenerator
 
     MESSAGE
     Clipboard.copy(message)
+  end
+
+  private
+
+  def validate_staged_content
+    return unless staged_content.empty?
+
+    raise 'No changes have been staged. Please stage changes before running this script.'.red
   end
 end
 
