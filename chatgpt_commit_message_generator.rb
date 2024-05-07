@@ -79,7 +79,7 @@ class CommitMessageGenerator
         "properties": {
           "body": {
             "type": 'string',
-            "description": 'The body of the commit message. Uses multiple lines with a bulleted list. Lines wrap at 72 characters'
+            "description": 'The body of the commit message. Use multiple lines in a bulleted list to succintly describe the changes. Lines wrap at 72 characters'
           },
           "subject": {
             "type": 'string',
