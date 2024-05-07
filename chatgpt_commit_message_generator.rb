@@ -122,85 +122,105 @@ class CommitMessageGenerator
   end
 end
 
-# ==============================================================================
-# Main Script
-# ==============================================================================
+class CommitMessageHandler
+  attr_reader :generator, :prompt, :message
 
-begin
-  prompt = TTY::Prompt.new
+  def initialize
+    @generator = CommitMessageGenerator.new
+    @prompt = TTY::Prompt.new
+  end
 
-  puts "\n--------------------------------------------------------------------------------".white
-  # Start timer
-  start_time = Time.now
+  def handle_commit_message
+    start_time = Time.now
+    response = generator.send_request_to_openai_api
+    handle_api_errors(response)
+    extract_commit_message(response)
+    end_time = Time.now
+    display_summary(start_time, end_time)
+    handle_user_input
+  rescue StandardError => e
+    handle_error(e)
+  rescue SystemExit, Interrupt
+    exit_gracefully
+  end
 
-  # Send request to OpenAI API
-  generator = CommitMessageGenerator.new
-  response = generator.send_request_to_openai_api
+  private
 
-  # Check for errors in the response
-  if response['error']
-    print "✗\n\nOpenAI API Error:\n#{response['error']}\n".red
+  def handle_api_errors(response)
+    if response['error']
+      puts "✗\n\nOpenAI API Error:\n#{response['error']}\n".red
+      exit 1
+    end
+    print "✓\n".green
+  end
+
+  def extract_commit_message(response)
+    json_response = response['choices'][0]['message']['function_call']['arguments']
+    parsed_response = JSON.parse(json_response, object_class: OpenStruct)
+    @message = <<~MESSAGE
+      #{parsed_response.subject}
+
+      #{parsed_response.body.gsub('"', '\"').gsub('`', "'")}
+
+    MESSAGE
+    Clipboard.copy(message)
+  end
+
+  def display_summary(start_time, end_time)
+    elapsed_time = end_time - start_time
+    time_message = "\nTime to get message from ChatGPT: #{elapsed_time.round(2)} seconds"
+    puts time_message.yellow
+    puts "\nThe commit message has been copied to your clipboard and is displayed below:\n".magenta
+    puts message.cyan
+    puts "\n--------------------------------------------------------------------------------".white
+  end
+
+  def handle_user_input
+    user_input = prompt.select("\nWhat would you like to do?") do |menu|
+      menu.enum '.'
+      menu.choice 'Submit commit with this message', 1
+      menu.choice 'Edit message before committing', 2
+      menu.choice 'Exit without committing', 3
+      menu.choice 'Start a debugger session', 4
+    end
+
+    process_user_input(user_input)
+  end
+
+  def process_user_input(user_input)
+    case user_input
+    when 1
+      puts "\nSubmitting commit...".white
+      system("git commit -m \"#{message}\"")
+    when 2
+      puts "\nOpening editor...".white
+      system("git commit -e -m \"#{message}\"")
+    when 3
+      exit_gracefully
+    when 4
+      start_debugger
+    end
+  end
+
+  def handle_error(e)
+    puts "\nEncountered an error:".yellow
+    puts "#{e.class}: #{e.message}".red
+    binding.pry
+    puts "\nExiting debugger session...".yellow
+  end
+
+  def exit_gracefully
+    puts "\nExiting without committing...".yellow
     exit 1
   end
-  print "✓\n".green
 
-  # Extract the generated commit message from the response
-  json_response = response['choices'][0]['message']['function_call']['arguments']
-  parsed_response = JSON.parse(json_response, object_class: OpenStruct)
-
-  # Escape double quotes and tildes in the commit message
-  message = <<~MESSAGE
-    #{parsed_response.subject}
-
-    #{parsed_response.body.gsub('"', '\"').gsub('`', "'")}
-
-  MESSAGE
-
-  # Commit message created with help from ChatGPT.
-  Clipboard.copy(message) # Copy the generated commit message to the clipboard
-
-  # End timer and display summary
-  end_time = Time.now
-  elapsed_time = end_time - start_time
-  time_message = "\nTime to get message from ChatGPT: #{elapsed_time.round(2)} seconds"
-  puts time_message.yellow
-  puts "\nThe commit message has been copied to your clipboard and is displayed below:\n".magenta
-  puts message.cyan
-  puts "\n--------------------------------------------------------------------------------".white
-
-  # Prompt the user for how to proceed
-  user_input = prompt.select("\nWhat would you like to do?") do |menu|
-    menu.enum '.'
-
-    menu.choice 'Submit commit with this message', 1
-    menu.choice 'Edit message before committing', 2
-    menu.choice 'Exit without committing', 3
-    menu.choice 'Start a debugger session', 4
+  def start_debugger
+    puts "\nStarting debugger session...".yellow
+    binding.pry
+    puts "\nExiting debugger session...".yellow
   end
-rescue StandardError => e
-  puts "\nEncountered an error:".yellow
-  puts "#{e.class}: #{e.message}".red
-  binding.pry
-  puts "\nExiting debugger session...".yellow
-rescue SystemExit, Interrupt
-  # Gracefully handle exceptions like Ctrl-C or Ctrl-D
-  puts "\nExiting without committing...".yellow
-  exit 1
 end
 
-# Process the user's input
-case user_input
-when 1
-  puts "\nSubmitting commit...".white
-  system("git commit -m \"#{message}\"")
-when 2
-  puts "\nOpening editor...".white
-  system("git commit -e -m \"#{message}\"")
-when 3
-  puts "\nExiting without committing...".yellow
-  exit 1
-when 4
-  puts "\nStarting debugger session...".yellow
-  binding.pry
-  puts "\nExiting debugger session...".yellow
-end
+# Use the new class in your main script
+handler = CommitMessageHandler.new
+handler.handle_commit_message
