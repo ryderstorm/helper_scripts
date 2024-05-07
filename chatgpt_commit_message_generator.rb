@@ -50,63 +50,49 @@ require 'json'
 require 'ostruct'
 require 'time'
 
-# This class generates commit messages based on staged changes.
-class CommitMessageGenerator
+# This class sends a question to the OpenAI API and retrieves a response.
+# It is a base class that can be used to create other classes that interact
+# with the OpenAI API.
+class ChatGPTGenerator
   OPENAI_URL = 'https://api.openai.com/v1/chat/completions'
   OPENAI_API_KEY = ENV['OPENAI_API_KEY']
   OPENAI_MODEL = ENV['OPENAI_MODEL']
-  CHATGPT_FUNCTION_DEFINITION = {
-    "name": 'commit_message',
-    "description": 'Create a conventional commit message based on the provided file changes.',
-    "parameters": {
-      "type": 'object',
-      "properties": {
-        "body": {
-          "type": 'string',
-          "description": 'The body of the commit message. Use multiple lines in a bulleted list to \
-            succintly describe the changes. Lines wrap at 72 characters'
-        },
-        "subject": {
-          "type": 'string',
-          "description": "The subject line of the commit message. Briefly summarize the changes. \
-            Concise, under 50 characters. Follows conventional commit message format, so the message \
-            must start with `feat:`, `fix:`, `refactor:`, etc.. Does not use generic summaries \
-            like 'Updated files'. Does not include filenames in the subject line."
-        }
-      }
-    }
-  }.freeze
+
+  attr_reader :api_key, :function_description, :function_properties, :model
 
   def initialize
-    @staged_content = `git --no-pager diff --staged --unified=1`
-    return unless @staged_content.empty?
-
-    puts 'No changes have been staged. Please stage changes before running this script.'.red
-    exit 1
-  end
-
-  def question
-    <<~QUESTION
-      Create a convnetional commit message based on these file changes:
-      ```#{@staged_content}```
-    QUESTION
+    @api_key = ENV['OPENAI_API_KEY']
+    @model = ENV['OPENAI_MODEL']
   end
 
   def headers
     {
       'Content-Type' => 'application/json',
-      'Authorization' => "Bearer #{OPENAI_API_KEY}"
+      'Authorization' => "Bearer #{@api_key}"
     }
   end
 
   def message_body
-    formatted_question = question.gsub("\n", ' ')
-    {
-      "model": ENV['OPENAI_MODEL'],
+    formatted_question = question
+    functions = function_definition
+    message = {
+      "model": @model,
       "messages": [{ "role": 'user', "content": formatted_question }],
-      "functions": [CHATGPT_FUNCTION_DEFINITION],
+      "functions": [functions],
       "temperature": 0.25
-    }.to_json
+    }
+    message.to_json
+  end
+
+  def function_definition
+    {
+      "name": 'commit_message',
+      "description": function_description,
+      "parameters": {
+        "type": 'object',
+        "properties": function_properties
+      }
+    }
   end
 
   def send_request_to_openai_api
@@ -122,6 +108,53 @@ class CommitMessageGenerator
     sleep rand(1..5)
     retry
   end
+end
+
+# This class generates commit messages based on staged changes.
+class CommitMessageGenerator < ChatGPTGenerator
+  FUNCTION_DESCRIPTION = 'Generate a conventional commit message based on the staged changes.'
+  FUNCTION_PROPERTIES = {
+    "body": {
+      "type": 'string',
+      "description": 'The body of the commit message. Use multiple lines in a bulleted list to \
+              succintly describe the changes. Lines wrap at 72 characters'
+    },
+    "subject": {
+      "type": 'string',
+      "description": "The subject line of the commit message. Briefly summarize the changes. \
+              Concise, under 50 characters. Follows conventional commit message format, so the message \
+              must start with `feat:`, `fix:`, `refactor:`, etc.. Does not use generic summaries \
+              like 'Updated files'. Does not include filenames in the subject line."
+    }
+
+  }.freeze
+
+  attr_reader :staged_content
+
+  def initialize
+    super
+    @staged_content = `git --no-pager diff --staged --unified=1`
+    if @staged_content.empty?
+      puts 'No changes have been staged. Please stage changes before running this script.'.red
+      exit 1
+    end
+    @function_properties = FUNCTION_PROPERTIES
+    @function_description = FUNCTION_DESCRIPTION
+  end
+
+  def question
+    new_question = <<~QUESTION
+      Create a convnetional commit message based on these file changes:
+      ```#{staged_content}```
+    QUESTION
+    new_question.gsub("\n", ' ')
+  end
+end
+
+# This class generates a title and description for a pull request.
+# It uses the commit messages and the changes in the in the current branch
+# compared to the target branch to generate the PR content.
+class PRMessageGenerator < ChatGPTGenerator
 end
 
 class CommitMessageHandler
