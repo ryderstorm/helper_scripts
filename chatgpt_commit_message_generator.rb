@@ -153,6 +153,7 @@ class ChatGPTGenerator
 
   def generate_messages
     send_request_to_openai_api
+    handle_api_errors
     extract_message_from_response
     display_summary
   end
@@ -174,8 +175,14 @@ class ChatGPTGenerator
   end
 
   def extract_message_from_response
-    json_response = response['choices'][0]['message']['function_call']['arguments']
-    @response_obj = JSON.parse(json_response, object_class: OpenStruct)
+    obj = JSON.parse(response.body, object_class: OpenStruct)
+    message = obj.choices[0].message
+    function_response = message&.function_call&.arguments
+    if function_response.nil?
+      puts message.to_yaml.yellow
+      raise 'Error: OpenAI API response does not contain the expected function response.'
+    end
+    @response_obj = JSON.parse(function_response, object_class: OpenStruct)
   end
 
   def display_summary
@@ -220,10 +227,14 @@ class ChatGPTGenerator
     raise 'Please set the OPENAI_API_KEY and OPENAI_MODEL environment variables.'
   end
 
-  def handle_api_errors(response)
+  def handle_api_errors
     if response['error']
-      puts "✗\n\nOpenAI API Error:\n#{response['error']}\n".red
-      exit 1
+      puts <<~API_ERROR
+
+        ❌ OpenAI API Error ❌
+        #{JSON.pretty_generate(response['error']).yellow}
+      API_ERROR
+      raise 'Exiting due to OpenAI API error.'
     end
     print "✓\n".green
   end
