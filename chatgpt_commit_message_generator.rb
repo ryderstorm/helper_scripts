@@ -570,8 +570,8 @@ class UserInteractionHandler
     prompt_for_next_action
   rescue StandardError => e
     handle_error(e)
-  rescue SystemExit, Interrupt
-    exit_gracefully
+  rescue Interrupt
+    exit_gracefully 1
   end
 
   private
@@ -593,19 +593,18 @@ class UserInteractionHandler
     puts "\nEncountered an error:".yellow
     puts "#{e.class}: #{e.message}".red
     puts e.backtrace.join("\n").yellow
-    binding.pry
-    puts "\nExiting debugger session...".yellow
+    start_debugger
   end
 
-  def exit_gracefully
-    puts "\nExiting...".yellow
-    exit 1
+  def exit_gracefully(exit_code = 0)
+    puts "\nExiting application...".yellow
+    exit exit_code
   end
 
   def start_debugger
     puts "\nStarting debugger session...".yellow
     binding.pry
-    puts "\nExiting debugger session...".yellow
+    exit_gracefully
   end
 end
 
