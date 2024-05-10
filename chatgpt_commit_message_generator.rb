@@ -44,7 +44,6 @@ gemfile do
   gem 'httparty', require: true # A gem for making HTTP requests
   gem 'pry', require: true # A gem for debugging
   gem 'tty-prompt', require: true # A gem for displaying prompts in the console
-  gem 'tty-command', require: true # A gem for running shell commands
 end
 
 require 'json'
@@ -167,7 +166,6 @@ class ChatGPTGenerator
     @api_key = ENV['OPENAI_API_KEY']
     @model = ENV['OPENAI_MODEL']
     puts "Using OpenAI Model: #{@model.blue}"
-    @cmd = TTY::Command.new(printer: :null)
     @prompt = TTY::Prompt.new
     validate_required_variables
   end
@@ -213,42 +211,36 @@ class ChatGPTGenerator
   end
 
   def set_current_branch
-    result = run_command('git rev-parse --abbrev-ref HEAD')
-    @current_branch = result.out.strip
+    @current_branch = `git --no-pager rev-parse --abbrev-ref HEAD`
   end
 
   def get_commit_messages
-    result = run_command("git --no-pager log --no-patch --pretty=format:\"=-=-=-=-=-=-=-=-=-=-%n%h | %cd%n%s%n%b\" #{target_branch}..#{current_branch}")
-    @commit_messages = result.out.strip
+    @commit_messages = `git --no-pager log --no-patch --pretty=format:\"=-=-=-=-=-=-=-=-=-=-%n%h | %cd%n%s%n%b\" #{target_branch}..#{current_branch}`
   end
 
   def set_changes_from_local
-    result = run_command('git --no-pager diff --unified=1')
-    @code_changes = result.out.strip
+    @code_changes = `git --no-pager diff --unified=1`
   end
 
   def set_changes_from_branches
     set_current_branch
     prompt_for_target_branch if target_branch.nil?
-    result = run_command("git --no-pager diff --unified=1 #{target_branch}..#{current_branch}")
-    @code_changes = result.out.strip
+    @code_changes = `git --no-pager diff --unified=1 #{target_branch}..#{current_branch}`
   end
 
   def set_changes_from_staged
-    result = run_command('git diff --cached --unified=1')
-    @code_changes = result.out
+    @code_changes = `git diff --cached --unified=1`
   end
 
   def prompt_for_target_branch
-    branch_options = run_command('git branch --format="%(refname:short)"').out.split("\n")
+    branch_options = `git --no-pager branch --format="%(refname:short)"`.split("\n")
     @target_branch = prompt.select('Select the target branch for the PR:', branch_options)
   end
 
   def set_changes_from_commit
-    commit_options = run_command('git log --oneline').out.split("\n")
+    commit_options = `git --no-pager log --oneline`.strip.split("\n")
     selected_commit = prompt.select('Select a commit to review:', commit_options)
-    result = run_command("git --no-pager show --unified=1 --pretty=\"\" #{selected_commit.split(' ')[0]}")
-    @code_changes = result.out
+    @code_changes = `git --no-pager show --unified=1 --pretty=\"\" #{selected_commit.split(' ')[0]}`
   end
 
   def validate_code_changes
@@ -264,13 +256,6 @@ class ChatGPTGenerator
   end
 
   private
-
-  def run_command(command)
-    result = @cmd.run!(command)
-    raise "Error: #{result.error}" if result.failure?
-
-    result
-  end
 
   def headers
     {
@@ -364,11 +349,11 @@ class CommitMessageGenerator < ChatGPTGenerator
   end
 
   def submit_commit
-    @cmd.run("git commit --message \"#{message}\"")
+    system("git --no-pager commit --message \"#{message}\"")
   end
 
   def edit_and_submit_commit
-    @cmd.run("git commit --edit --message \"#{message}\"")
+    system("git --no-pager commit --edit --message \"#{message}\"")
   end
 end
 
@@ -392,13 +377,11 @@ class CommitMessageRewriter < CommitMessageGenerator
   end
 
   def retrieve_commits
-    result = run_command('git --no-pager log --oneline')
-    @commit_list = result.out
+    @commit_list = `git --no-pager log --oneline`
   end
 
   def retrieve_commit_changes
-    result = run_command("git --no-pager show --unified=1 #{selected_commit}")
-    @code_changes = result.out
+    @code_changes = `git --no-pager show --unified=1 #{selected_commit}`
   end
 
   def additional_actions
@@ -409,7 +392,6 @@ class CommitMessageRewriter < CommitMessageGenerator
   end
 
   def submit_commit
-    # @cmd.run("git commit --amend --message \"#{message}\"")
     puts <<~MESSAGE
       This script cannot rewrite commits yet.
       Please use Lazygit or another tool to rewrite the commit.
@@ -419,7 +401,6 @@ class CommitMessageRewriter < CommitMessageGenerator
   end
 
   def edit_and_submit_commit
-    # @cmd.run("git commit --edit --amend --message \"#{message}\"")
     puts <<~MESSAGE
       This script cannot rewrite commits yet.
       Please use Lazygit or another tool to rewrite the commit.
