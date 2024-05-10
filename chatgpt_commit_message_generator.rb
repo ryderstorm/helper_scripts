@@ -254,7 +254,7 @@ class ChatGPTGenerator
   def validate_code_changes
     return unless code_changes.empty?
 
-    raise 'No code changes found. Please stage some changes before running this script.'
+    raise 'No code changes found. Please try again.'
   end
 
   def validate_commit_messages
@@ -364,11 +364,11 @@ class CommitMessageGenerator < ChatGPTGenerator
   end
 
   def submit_commit
-    @cmd.run("git commit -m \"#{message}\"")
+    @cmd.run("git commit --message \"#{message}\"")
   end
 
   def edit_and_submit_commit
-    @cmd.run("git commit -e -m \"#{message}\"")
+    @cmd.run("git commit --edit --message \"#{message}\"")
   end
 end
 
@@ -409,7 +409,7 @@ class CommitMessageRewriter < CommitMessageGenerator
   end
 
   def submit_commit
-    # @cmd.run("git commit --amend -m \"#{message}\"")
+    # @cmd.run("git commit --amend --message \"#{message}\"")
     puts <<~MESSAGE
       This script cannot rewrite commits yet.
       Please use Lazygit or another tool to rewrite the commit.
@@ -419,7 +419,7 @@ class CommitMessageRewriter < CommitMessageGenerator
   end
 
   def edit_and_submit_commit
-    # @cmd.run("git commit -e --amend -m \"#{message}\"")
+    # @cmd.run("git commit --edit --amend --message \"#{message}\"")
     puts <<~MESSAGE
       This script cannot rewrite commits yet.
       Please use Lazygit or another tool to rewrite the commit.
