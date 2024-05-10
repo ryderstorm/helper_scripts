@@ -133,6 +133,25 @@ module Constants
     ```
 
   QUESTION
+  REVIEW_FUNCTION_DESCRIPTION = 'Generate a summary and a code review based on the changes provided.'
+  REVIEW_FUNCTION_PROPERTIES = {
+    "summary": {
+      "type": 'string',
+      "description": 'A summary of the changes made in the code. Include the purpose of the changes and the \
+              high-level impact.'
+    },
+    "review": {
+      "type": 'string',
+      "description": 'The code review message. Include any issues found and suggestions for improvement.'
+    }
+  }.freeze
+  REVIEW_FUNCTION_QUESTION = <<~QUESTION
+    Review the changes provided and provide feedback on the code.
+
+    ```shell
+    <-- CODE CHANGES -->
+    ```
+  QUESTION
 end
 
 # This class sends a question to the OpenAI API and retrieves a response.
@@ -451,7 +470,57 @@ class PRMessageGenerator < ChatGPTGenerator
   end
 end
 
+# This class generates a code review of the changes supplied.
+# Changes can be the staged content, the current differences in the branch,
+# a specific commit, or the diff between two branches.
+class CodeReviewer < ChatGPTGenerator
+  attr_reader :code_changes, :target_branch, :current_branch
 
+  def initialize
+    super
+
+    @function_properties = REVIEW_FUNCTION_PROPERTIES
+    @function_description = REVIEW_FUNCTION_DESCRIPTION
+    @function_question = REVIEW_FUNCTION_QUESTION
+
+    prompt_for_code_source
+    validate_code_changes
+  end
+
+  def prompt_for_code_source
+    review_actions = {
+      'Staged changes' => method(:set_changes_from_staged),
+      'Current branch changes' => method(:set_changes_from_branches),
+      'Specific commit' => method(:set_changes_from_commit)
+    }
+
+    review_type = prompt.select('What would you like to review?', review_actions.keys)
+    review_actions[review_type].call
+  end
+
+  def question
+    base_question = function_question.sub('<-- CODE CHANGES -->', code_changes)
+    base_question.gsub("\n", ' ')
+  end
+
+  def extract_message_from_response
+    super
+    @message = <<~MESSAGE
+      Summary:
+      #{response_obj.summary}
+
+      Review:
+      #{response_obj.review}
+
+    MESSAGE
+    Clipboard.copy(message)
+  end
+
+  def display_summary
+    super
+    puts "\nThe code review has been copied to your clipboard and is displayed below:\n".magenta
+    puts message.cyan
+    puts "\n--------------------------------------------------------------------------------".white
   end
 end
 
@@ -469,6 +538,8 @@ class UserInteractionHandler
       @generator = PRMessageGenerator.new(target_branch)
     when 'rewrite'
       @generator = CommitMessageRewriter.new
+    when 'review'
+      @generator = CodeReviewer.new
     else
       raise "Invalid operation type: [#{operation_type}]. Please provide a valid operation type."
     end
