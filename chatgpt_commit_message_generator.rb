@@ -141,13 +141,15 @@ end
 class ChatGPTGenerator
   include Constants
 
-  attr_reader :api_key, :function_description, :function_properties, :function_question, :message, :model, :response,
+  attr_reader :api_key, :function_description, :function_properties, :function_question, :message, :model, :prompt, :response,
               :response_obj
 
   def initialize(_args = nil)
     @api_key = ENV['OPENAI_API_KEY']
     @model = ENV['OPENAI_MODEL']
+    puts "Using OpenAI Model: #{@model.blue}"
     @cmd = TTY::Command.new(printer: :null)
+    @prompt = TTY::Prompt.new
     validate_required_variables
   end
 
@@ -191,7 +193,60 @@ class ChatGPTGenerator
     puts time_message.yellow
   end
 
+  def set_current_branch
+    result = run_command('git rev-parse --abbrev-ref HEAD')
+    @current_branch = result.out.strip
+  end
+
+  def get_commit_messages
+    result = run_command("git --no-pager log --no-patch --pretty=format:\"=-=-=-=-=-=-=-=-=-=-%n%h | %cd%n%s%n%b\" #{target_branch}..#{current_branch}")
+    @commit_messages = result.out.strip
+  end
+
+  def set_changes_from_branches
+    set_current_branch
+    prompt_for_target_branch if target_branch.nil?
+    result = run_command("git --no-pager diff --unified=1 #{target_branch}..#{current_branch}")
+    @code_changes = result.out.strip
+  end
+
+  def set_changes_from_staged
+    result = run_command('git diff --cached --unified=1')
+    @code_changes = result.out
+  end
+
+  def prompt_for_target_branch
+    branch_options = run_command('git branch --format="%(refname:short)"').out.split("\n")
+    @target_branch = prompt.select('Select the target branch for the PR:', branch_options)
+  end
+
+  def set_changes_from_commit
+    commit_options = run_command('git log --oneline').out.split("\n")
+    selected_commit = prompt.select('Select a commit to review:', commit_options)
+    result = run_command("git --no-pager show --unified=1 --pretty=\"\" #{selected_commit.split(' ')[0]}")
+    @code_changes = result.out
+  end
+
+  def validate_code_changes
+    return unless code_changes.empty?
+
+    raise 'No code changes found. Please stage some changes before running this script.'
+  end
+
+  def validate_commit_messages
+    return unless commit_messages.empty?
+
+    raise 'No commit messages found. Please make some commits before running this script.'
+  end
+
   private
+
+  def run_command(command)
+    result = @cmd.run!(command)
+    raise "Error: #{result.error}" if result.failure?
+
+    result
+  end
 
   def headers
     {
@@ -212,7 +267,7 @@ class ChatGPTGenerator
 
   def function_definition
     {
-      "name": 'commit_message',
+      "name": 'chatgpt_response_data',
       "description": function_description,
       "parameters": {
         "type": 'object',
@@ -242,7 +297,7 @@ end
 
 # This class generates commit messages based on staged changes.
 class CommitMessageGenerator < ChatGPTGenerator
-  attr_reader :staged_content
+  attr_reader :code_changes
 
   def initialize
     super
@@ -250,20 +305,12 @@ class CommitMessageGenerator < ChatGPTGenerator
     @function_description = COMMIT_FUNCTION_DESCRIPTION
     @function_question = COMMIT_FUNCTION_QUESTION
 
-    get_staged_content
-    validate_staged_content
-  end
-
-  def get_staged_content
-    command = 'git diff --cached --unified=1'
-    result = @cmd.run!(command)
-    raise "Error: #{result.error}" if result.failure?
-
-    @staged_content = result.out
+    set_changes_from_staged
+    validate_code_changes
   end
 
   def question
-    base_question = function_question.sub('<-- STAGED CHANGES -->', staged_content)
+    base_question = function_question.sub('<-- STAGED CHANGES -->', code_changes)
     base_question.gsub("\n", ' ')
   end
 
@@ -285,12 +332,15 @@ class CommitMessageGenerator < ChatGPTGenerator
     puts "\n--------------------------------------------------------------------------------".white
   end
 
-  private
+  def submit_commit
+    @cmd.run("git commit -m \"#{message}\"")
+  end
 
-  def validate_staged_content
-    return unless staged_content.empty?
+  def edit_and_submit_commit
+    @cmd.run("git commit -e -m \"#{message}\"")
+  end
+end
 
-    raise 'No changes have been staged. Please stage changes before running this script.'.red
   end
 end
 
@@ -307,12 +357,12 @@ class PRMessageGenerator < ChatGPTGenerator
     @function_question = PR_FUNCTION_QUESTION
 
     @target_branch = target_branch
-    @current_branch = `git rev-parse --abbrev-ref HEAD`.strip
+
+    get_commit_messages
+    set_changes_from_branches
     validate_branches
-    @commit_messages = `git --no-pager log --no-patch --pretty=format:"%n=-=-=-=-=-=-=-=-=-=-%n%h%n%s%n%b" \
-      #{current_branch}..#{target_branch}`
-    @code_changes = `git --no-pager diff --unified=1 #{current_branch}..#{target_branch}`
     validate_code_changes
+    validate_commit_messages
   end
 
   def question
@@ -353,13 +403,12 @@ class PRMessageGenerator < ChatGPTGenerator
     raise 'The current branch and the target branch are the same. Please provide a different target branch.'
   end
 
-  def validate_code_changes
-    return unless code_changes.empty? || commit_messages.empty?
 
-    raise 'Unable to determine the code changes or the commit messages. Please check your git configuration.'
   end
 end
 
+# This class handles user interaction and provides options for the user
+# to submit the generated message, edit the message, or exit.
 class UserInteractionHandler
   attr_reader :generator, :prompt, :message
 
@@ -389,11 +438,11 @@ class UserInteractionHandler
   def handle_user_input
     user_input = prompt.select("\nWhat would you like to do?") do |menu|
       menu.enum '.'
-      menu.choice 'Submit commit with this message', 1
-      menu.choice 'Edit message before committing', 2
-      menu.choice 'Exit without committing', 3
-      menu.choice 'Regenerate', 4
-      menu.choice 'Start a debugger session', 5
+      menu.choice 'Submit commit with this message'
+      menu.choice 'Edit message before committing'
+      menu.choice 'Exit without committing'
+      menu.choice 'Regenerate'
+      menu.choice 'Start a debugger session'
     end
 
     process_user_input(user_input)
@@ -401,17 +450,15 @@ class UserInteractionHandler
 
   def process_user_input(user_input)
     case user_input
-    when 1
-      puts "\nSubmitting commit...".white
-      system("git commit -m \"#{generator.message}\"")
-    when 2
-      puts "\nOpening editor...".white
-      system("git commit -e -m \"#{generator.message}\"")
-    when 3
+    when 'Submit commit with this message'
+      generator.submit_commit
+    when 'Edit message before committing'
+      generator.edit_and_submit_commit
+    when 'Exit without committing'
       exit_gracefully
-    when 4
+    when 'Regenerate'
       run_generator
-    when 5
+    when 'Start a debugger session'
       start_debugger
     end
   end
@@ -425,7 +472,7 @@ class UserInteractionHandler
   end
 
   def exit_gracefully
-    puts "\nExiting without committing...".yellow
+    puts "\nExiting...".yellow
     exit 1
   end
 
