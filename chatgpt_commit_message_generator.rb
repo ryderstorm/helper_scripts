@@ -222,6 +222,11 @@ class ChatGPTGenerator
     @commit_messages = result.out.strip
   end
 
+  def set_changes_from_local
+    result = run_command('git --no-pager diff --unified=1')
+    @code_changes = result.out.strip
+  end
+
   def set_changes_from_branches
     set_current_branch
     prompt_for_target_branch if target_branch.nil?
@@ -503,8 +508,9 @@ class CodeReviewer < ChatGPTGenerator
 
   def prompt_for_code_source
     review_actions = {
+      'Current changes' => method(:set_changes_from_local),
       'Staged changes' => method(:set_changes_from_staged),
-      'Current branch changes' => method(:set_changes_from_branches),
+      'Changes between branches' => method(:set_changes_from_branches),
       'Specific commit' => method(:set_changes_from_commit)
     }
 
