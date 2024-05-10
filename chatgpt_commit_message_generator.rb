@@ -392,7 +392,7 @@ class CommitMessageRewriter < CommitMessageGenerator
   end
 
   def retrieve_commits
-    result = run_command('git log --oneline')
+    result = run_command('git --no-pager log --oneline')
     @commit_list = result.out
   end
 
