@@ -351,6 +351,13 @@ class CommitMessageGenerator < ChatGPTGenerator
     puts "\n--------------------------------------------------------------------------------".white
   end
 
+  def additional_actions
+    {
+      'Submit commit with this message' => -> { submit_commit },
+      'Edit message before committing' => -> { edit_and_submit_commit }
+    }
+  end
+
   def submit_commit
     @cmd.run("git commit -m \"#{message}\"")
   end
@@ -387,6 +394,13 @@ class CommitMessageRewriter < CommitMessageGenerator
   def retrieve_commit_changes
     result = run_command("git --no-pager show --unified=1 #{selected_commit}")
     @code_changes = result.out
+  end
+
+  def additional_actions
+    {
+      'Submit commit with this message' => -> { submit_commit },
+      'Edit message before committing' => -> { edit_and_submit_commit }
+    }
   end
 
   def submit_commit
@@ -547,7 +561,7 @@ class UserInteractionHandler
 
   def run_generator
     generator.generate_messages
-    handle_user_input
+    prompt_for_next_action
   rescue StandardError => e
     handle_error(e)
   rescue SystemExit, Interrupt
@@ -556,14 +570,14 @@ class UserInteractionHandler
 
   private
 
-  def handle_user_input
+  def prompt_for_next_action
     user_actions = {
-      'Submit commit with this message' => -> { generator.submit_commit },
-      'Edit message before committing' => -> { generator.edit_and_submit_commit },
-      'Exit without committing' => method(:exit_gracefully),
       'Regenerate' => method(:run_generator),
-      'Start a debugger session' => method(:start_debugger)
+      'Start a debugger session' => method(:start_debugger),
+      'Exit' => method(:exit_gracefully)
     }
+
+    user_actions = generator.additional_actions.merge!(user_actions) if generator.respond_to?(:additional_actions)
 
     user_input = prompt.select("\nWhat would you like to do?", user_actions.keys)
     user_actions[user_input].call
