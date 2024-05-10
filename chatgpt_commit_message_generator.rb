@@ -557,31 +557,16 @@ class UserInteractionHandler
   private
 
   def handle_user_input
-    user_input = prompt.select("\nWhat would you like to do?") do |menu|
-      menu.enum '.'
-      menu.choice 'Submit commit with this message'
-      menu.choice 'Edit message before committing'
-      menu.choice 'Exit without committing'
-      menu.choice 'Regenerate'
-      menu.choice 'Start a debugger session'
-    end
+    user_actions = {
+      'Submit commit with this message' => -> { generator.submit_commit },
+      'Edit message before committing' => -> { generator.edit_and_submit_commit },
+      'Exit without committing' => method(:exit_gracefully),
+      'Regenerate' => method(:run_generator),
+      'Start a debugger session' => method(:start_debugger)
+    }
 
-    process_user_input(user_input)
-  end
-
-  def process_user_input(user_input)
-    case user_input
-    when 'Submit commit with this message'
-      generator.submit_commit
-    when 'Edit message before committing'
-      generator.edit_and_submit_commit
-    when 'Exit without committing'
-      exit_gracefully
-    when 'Regenerate'
-      run_generator
-    when 'Start a debugger session'
-      start_debugger
-    end
+    user_input = prompt.select("\nWhat would you like to do?", user_actions.keys)
+    user_actions[user_input].call
   end
 
   def handle_error(e)
