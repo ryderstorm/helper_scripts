@@ -341,6 +341,53 @@ class CommitMessageGenerator < ChatGPTGenerator
   end
 end
 
+# This class rewrites a selected commit message.
+# It prompts the user to select a commit to rewrite and then retrieves the changes
+# for that commit.
+class CommitMessageRewriter < CommitMessageGenerator
+  attr_reader :commit_list, :selected_commit
+
+  def get_code_changes
+    retrieve_commits
+    prompt_for_commit
+    retrieve_commit_changes
+  end
+
+  def prompt_for_commit
+    # Prompts the user to select a commit to rewrite
+    options = commit_list.strip.split("\n")
+    selection = prompt.select('Select a commit to rewrite:', options)
+    @selected_commit = selection.split(' ')[0]
+  end
+
+  def retrieve_commits
+    result = run_command('git log --oneline')
+    @commit_list = result.out
+  end
+
+  def retrieve_commit_changes
+    result = run_command("git --no-pager show --unified=1 #{selected_commit}")
+    @code_changes = result.out
+  end
+
+  def submit_commit
+    # @cmd.run("git commit --amend -m \"#{message}\"")
+    puts <<~MESSAGE
+      This script cannot rewrite commits yet.
+      Please use Lazygit or another tool to rewrite the commit.
+
+      The commit message has been copied to your clipboard.
+    MESSAGE
+  end
+
+  def edit_and_submit_commit
+    # @cmd.run("git commit -e --amend -m \"#{message}\"")
+    puts <<~MESSAGE
+      This script cannot rewrite commits yet.
+      Please use Lazygit or another tool to rewrite the commit.
+
+      The commit message has been copied to your clipboard.
+    MESSAGE
   end
 end
 
@@ -402,6 +449,7 @@ class PRMessageGenerator < ChatGPTGenerator
 
     raise 'The current branch and the target branch are the same. Please provide a different target branch.'
   end
+end
 
 
   end
@@ -419,6 +467,8 @@ class UserInteractionHandler
       @generator = CommitMessageGenerator.new
     when 'pr'
       @generator = PRMessageGenerator.new(target_branch)
+    when 'rewrite'
+      @generator = CommitMessageRewriter.new
     else
       raise "Invalid operation type: [#{operation_type}]. Please provide a valid operation type."
     end
