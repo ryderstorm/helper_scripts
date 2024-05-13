@@ -1,39 +1,58 @@
 # frozen_string_literal: true
 
-# This script uses the OpenAI API to generate a commit message based on the
-# changes that have been staged. It then copies the commit message to the
-# clipboard and prompts the user to either submit the commit with the generated
-# message, edit the message before submitting, or exit without committing.
-#
-# You need to have an OpenAI API key to use this script.
-# You can get an API key by signing up for an OpenAI account at
-# https://beta.openai.com/.
-#
-# Requirements:
-#   - Ruby 2.6 or higher
-#   - Bundler
-#   - OpenAI API key set in OPENAI_API_KEY environment variable
-#   - OpenAI model ID set in OPENAI_MODEL environment variable
-#
-# Usage:
-#  1. Stage changes you want to commit
-#  2. Run this script from the root of your git repository
-#  3. Follow the prompts provided by the script
+# rubocop:disable Style/BlockComments
+=begin
+===============================================================================
+This script is designed to interact with the OpenAI API to assist with
+various Git tasks. It leverages the capabilities of OpenAI's GPT model to
+generate commit messages, pull request descriptions, and code reviews based
+on the changes made in your codebase.
 
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# !!! IMPORTANT !!! IMPORTANT !!! IMPORTANT !!! IMPORTANT !!! IMPORTANT !!!
-# This script sends your staged changes to the OpenAI API.
-# That means that your staged changes will be sent to OpenAI's servers.
-# Be careful not to run this script on any sensitive data.
-# Make sure you are complying with the rules and terms of use for
-# the codebase you are working on.
-#
-# Review OpenAI's Terms of Use at https://openai.com/policies/terms-of-use
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+The script is organized into a series of modules and classes. The Constants
+module defines various constants and questions that are used to interact
+with the OpenAI API. The ChatGPTGenerator class is the core of the script,
+responsible for sending requests to the OpenAI API and handling the responses.
 
-# ==============================================================================
+The ChatGPTGenerator class includes methods to retrieve the current branch,
+commit messages, and code changes from your local Git repository. It also
+includes methods to validate the retrieved data and to prompt the user for
+input when necessary.
+
+The script uses the OpenAI API to generate meaningful and conventional commit
+messages, pull request descriptions, and code reviews based on the changes
+made in your code. It does this by sending a formatted question to the API
+and processing the response.
+
+The ChatGPTGenerator class also includes methods to handle API errors, extract
+messages from the API response, and display a summary of the operation.
+
+You need to have an OpenAI API key to use this script.
+You can get an API key by signing up for an OpenAI account at
+https://beta.openai.com/.
+
+Requirements:
+  - Ruby 2.6 or higher
+  - Bundler
+  - OpenAI API key set in OPENAI_API_KEY environment variable
+  - OpenAI model ID set in OPENAI_MODEL environment variable
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!! IMPORTANT !!! IMPORTANT !!! IMPORTANT !!! IMPORTANT !!! IMPORTANT !!!
+This script sends your staged changes to the OpenAI API.
+That means that your staged changes will be sent to OpenAI's servers.
+Be careful not to run this script on any sensitive data.
+Make sure you are complying with the rules and terms of use for
+the codebase you are working on.
+
+Review OpenAI's Terms of Use at https://openai.com/policies/terms-of-use
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+===============================================================================
+=end
+# rubocop:enable Style/BlockComments
+
+# =============================================================================
 # Setup and Functions
-# ==============================================================================
+# =============================================================================
 
 require 'bundler/inline'
 
@@ -601,9 +620,9 @@ class UserInteractionHandler
   end
 end
 
-# ==============================================================================
+# =============================================================================
 # Main Script
-# ==============================================================================
+# =============================================================================
 
 operation_type = ARGV[0] # Get operation type from command line argument
 target_branch = ARGV[1] # Get target branch from command line argument
