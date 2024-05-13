@@ -532,7 +532,7 @@ class UserInteractionHandler
 
   def initialize(operation_type, target_branch)
     @prompt = TTY::Prompt.new
-    case operation_type.downcase
+    case operation_type&.downcase
     when 'commit'
       @generator = CommitMessageGenerator.new
     when 'pr'
@@ -542,7 +542,7 @@ class UserInteractionHandler
     when 'review'
       @generator = CodeReviewer.new
     else
-      raise "Invalid operation type: [#{operation_type}]. Please provide a valid operation type."
+      prompt_for_operation_type
     end
   end
 
@@ -556,6 +556,18 @@ class UserInteractionHandler
   end
 
   private
+
+  def prompt_for_operation_type
+    operation_types = {
+      'Generate a commit message for the currently staged changes' => 'CommitMessageGenerator',
+      'Generate a Pull Request message' => 'PRMessageGenerator',
+      'Rewrite a commit message' => 'CommitMessageRewriter',
+      'Review code changes' => 'CodeReviewer'
+    }
+
+    user_input = prompt.select('What would you like to do?', operation_types.keys)
+    @generator = Object.const_get(operation_types[user_input]).new
+  end
 
   def prompt_for_next_action
     user_actions = {
