@@ -178,8 +178,8 @@ end
 class ChatGPTGenerator
   include Constants
 
-  attr_reader :api_key, :function_description, :function_properties, :function_question, :message, :model, :prompt, :response,
-              :response_obj
+  attr_reader :api_key, :code_changes, :function_description, :function_properties, :function_question, :message,
+              :model, :prompt, :response, :response_obj
 
   def initialize(_args = nil)
     @api_key = ENV['OPENAI_API_KEY']
@@ -333,6 +333,10 @@ class CommitMessageGenerator < ChatGPTGenerator
     @function_description = COMMIT_FUNCTION_DESCRIPTION
     @function_question = COMMIT_FUNCTION_QUESTION
 
+    setup
+  end
+
+  def setup
     set_changes_from_staged
     validate_code_changes
   end
@@ -382,7 +386,7 @@ end
 class CommitMessageRewriter < CommitMessageGenerator
   attr_reader :commit_list, :selected_commit
 
-  def get_code_changes
+  def setup
     retrieve_commits
     prompt_for_commit
     retrieve_commit_changes
@@ -411,21 +415,31 @@ class CommitMessageRewriter < CommitMessageGenerator
   end
 
   def submit_commit
-    puts <<~MESSAGE
+    message = <<~MESSAGE
+
+      ⚠️ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ⚠️
       This script cannot rewrite commits yet.
       Please use Lazygit or another tool to rewrite the commit.
 
       The commit message has been copied to your clipboard.
+      ⚠️ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ⚠️
+
     MESSAGE
+    puts message.yellow
   end
 
   def edit_and_submit_commit
-    puts <<~MESSAGE
+    message = <<~MESSAGE
+
+      ⚠️ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ⚠️
       This script cannot rewrite commits yet.
       Please use Lazygit or another tool to rewrite the commit.
 
       The commit message has been copied to your clipboard.
+      ⚠️ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ⚠️
+
     MESSAGE
+    puts message.yellow
   end
 end
 
@@ -433,7 +447,7 @@ end
 # It uses the commit messages and the changes in the in the current branch
 # compared to the target branch to generate the PR content.
 class PRMessageGenerator < ChatGPTGenerator
-  attr_reader :target_branch, :current_branch, :commit_messages, :code_changes
+  attr_reader :target_branch, :current_branch, :commit_messages
 
   def initialize(target_branch)
     super
@@ -585,6 +599,7 @@ class UserInteractionHandler
     }
 
     user_input = prompt.select('What would you like to do?', operation_types.keys)
+    puts "\nStarting the #{operation_types[user_input]}...".yellow
     @generator = Object.const_get(operation_types[user_input]).new
   end
 
