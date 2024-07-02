@@ -58,6 +58,9 @@ require 'bundler/inline'
 
 gemfile do
   source 'https://rubygems.org'
+  gem 'base64'
+  gem 'bigdecimal'
+  gem 'csv'
   gem 'clipboard', require: true # A gem for interacting with the clipboard
   gem 'colorize', require: true # A gem for adding colors to the console output
   gem 'httparty', require: true # A gem for making HTTP requests
