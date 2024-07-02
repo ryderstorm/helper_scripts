@@ -75,8 +75,8 @@ require 'time'
 module Constants
   # OpenAI API Configuration
   OPENAI_URL = 'https://api.openai.com/v1/chat/completions'
-  OPENAI_API_KEY = ENV['OPENAI_API_KEY']
-  OPENAI_MODEL = ENV['OPENAI_MODEL']
+  OPENAI_API_KEY = ENV.fetch('OPENAI_API_KEY', nil)
+  OPENAI_MODEL = ENV.fetch('OPENAI_MODEL', nil)
 
   # Commit Message Generation
   COMMIT_FUNCTION_DESCRIPTION = 'Generate a conventional commit message based on the staged changes.'
@@ -185,8 +185,8 @@ class ChatGPTGenerator
               :model, :prompt, :response, :response_obj
 
   def initialize(_args = nil)
-    @api_key = ENV['OPENAI_API_KEY']
-    @model = ENV['OPENAI_MODEL']
+    @api_key = ENV.fetch('OPENAI_API_KEY', nil)
+    @model = ENV.fetch('OPENAI_MODEL', nil)
     puts "Using OpenAI Model: #{@model.blue}"
     @prompt = TTY::Prompt.new
     validate_required_variables
