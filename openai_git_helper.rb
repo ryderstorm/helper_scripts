@@ -253,6 +253,9 @@ class ChatGPTGenerator
 
   def prompt_for_target_branch
     branch_options = `git --no-pager branch --format="%(refname:short)"`.split("\n")
+    branch_options.delete(current_branch)
+    branch_options.delete('main')
+    branch_options.prepend('main')
     @target_branch = prompt.select('Select the target branch for the PR:', branch_options)
   end
 
@@ -449,13 +452,17 @@ end
 class PRMessageGenerator < ChatGPTGenerator
   attr_reader :target_branch, :current_branch, :commit_messages
 
-  def initialize(target_branch)
+  def initialize(target_branch = nil)
     super
     @function_properties = PR_FUNCTION_PROPERTIES
     @function_description = PR_FUNCTION_DESCRIPTION
     @function_question = PR_FUNCTION_QUESTION
 
     @target_branch = target_branch
+    if target_branch.nil?
+      set_current_branch
+      prompt_for_target_branch
+    end
 
     get_commit_messages
     set_changes_from_branches
@@ -605,7 +612,7 @@ class UserInteractionHandler
 
   def prompt_for_next_action
     user_actions = {
-      'Regenerate' => method(:run_generator),
+      'Regenerate (does not load code changes)' => method(:run_generator),
       'Start a debugger session' => method(:start_debugger),
       'Exit' => method(:exit_gracefully)
     }
