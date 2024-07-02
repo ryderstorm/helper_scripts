@@ -81,21 +81,21 @@ module Constants
   # Commit Message Generation
   COMMIT_FUNCTION_DESCRIPTION = 'Generate a conventional commit message based on the staged changes.'
   COMMIT_FUNCTION_PROPERTIES = {
-    "body": {
-      "type": 'string',
-      "description": 'The body of the commit message. Use multiple lines in a bulleted list to \
-              succintly describe the changes. Lines wrap at 72 characters'
+    body: {
+      type: 'string',
+      description: 'The body of the commit message. Use multiple lines in a bulleted list to \
+              succinctly describe the changes. Lines wrap at 72 characters'
     },
-    "subject": {
-      "type": 'string',
-      "description": "The subject line of the commit message. Briefly summarize the changes. \
+    subject: {
+      type: 'string',
+      description: "The subject line of the commit message. Briefly summarize the changes. \
               Concise, under 50 characters. Follows conventional commit message format, so the message \
               must start with `feat:`, `fix:`, `refactor:`, etc.. Does not use generic summaries \
               like 'Updated files'. Does not include filenames in the subject line."
     }
   }.freeze
   COMMIT_FUNCTION_QUESTION = <<~QUESTION
-    Create a convnetional commit message based on these file changes:
+    Create a conventional commit message based on these file changes:
     ```shell
     <-- STAGED CHANGES -->
     ```
@@ -105,31 +105,31 @@ module Constants
   PR_FUNCTION_DESCRIPTION = 'Generate a title and description for a pull request based on the commit messages and the \
     changes in the current branch compared to the target branch.'
   PR_FUNCTION_PROPERTIES = {
-    "title": {
-      "type": 'string',
-      "description": 'The title of the pull request. Concise, under 50 characters. Must start with a conventional \
-              commit message prefix like `feat:`, `fix:`, `refactor:`, etc.'
+    title: {
+      type: 'string',
+      description: 'The title of the pull request.'
     },
-    "description": {
-      "type": 'string',
-      "description": 'The description of the pull request. Use multiple lines to describe the changes in detail. \
-              Include references to issues or other PRs if applicable.'
+    description: {
+      type: 'string',
+      description: 'The description of the pull request.'
     }
   }.freeze
   PR_FUNCTION_QUESTION = <<~QUESTION
-    Fill out a Pull Request template based on the changes and commits in the branch for the PR.
+    I need you to help me write a pull request for the changes in my branch. I need a title for the pull request that is concise and less than 50 characters. The title must be in conventional commit message format starting with `feat:`, `fix:`, `refactor:`, etc. I also need a description for the pull request. Fill out the provided template for the pull request description based on the provided changes and commit messages.
+
+    For the description you should analyze the commits and generate a summary. Do not just list the commit messages from the branch.
 
     Here is the template:
 
     ```markdown
     ## Why?
 
-    <-- PARAPGRAH(S) DESCRIBING WHY THESE CHANGES ARE NECESSARY -->
+    <-- BRIEF PARAGRAPH(S) DESCRIBING PURPOSE OF THE CHANGES -->
 
 
     ## What Changed?
 
-    <-- BULLETED LIST OF CHANGES MADE IN THE PR -->
+    <-- BULLETED LIST SUMMARIZING THE CHANGES MADE IN THE PR -->
 
     ```
 
@@ -156,14 +156,14 @@ module Constants
   QUESTION
   REVIEW_FUNCTION_DESCRIPTION = 'Generate a summary and a code review based on the changes provided.'
   REVIEW_FUNCTION_PROPERTIES = {
-    "summary": {
-      "type": 'string',
-      "description": 'A summary of the changes made in the code. Include the purpose of the changes and the \
+    summary: {
+      type: 'string',
+      description: 'A summary of the changes made in the code. Include the purpose of the changes and the \
               high-level impact.'
     },
-    "review": {
-      "type": 'string',
-      "description": 'The code review message. Include any issues found and suggestions for improvement.'
+    review: {
+      type: 'string',
+      description: 'The code review message. Include any issues found and suggestions for improvement.'
     }
   }.freeze
   REVIEW_FUNCTION_QUESTION = <<~QUESTION
@@ -291,21 +291,21 @@ class ChatGPTGenerator
 
   def message_body
     message = {
-      "model": @model,
-      "messages": [{ "role": 'user', "content": question }],
-      "functions": [function_definition],
-      "temperature": 0.25
+      model: @model,
+      messages: [{ role: 'user', content: question }],
+      functions: [function_definition],
+      temperature: 0.25
     }
     message.to_json
   end
 
   def function_definition
     {
-      "name": 'chatgpt_response_data',
-      "description": function_description,
-      "parameters": {
-        "type": 'object',
-        "properties": function_properties
+      name: 'chatgpt_response_data',
+      description: function_description,
+      parameters: {
+        type: 'object',
+        properties: function_properties
       }
     }
   end
