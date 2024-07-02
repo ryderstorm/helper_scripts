@@ -605,10 +605,12 @@ class UserInteractionHandler
       'Generate a commit message for the currently staged changes' => 'CommitMessageGenerator',
       'Generate a Pull Request message' => 'PRMessageGenerator',
       'Rewrite a commit message' => 'CommitMessageRewriter',
-      'Review code changes' => 'CodeReviewer'
+      'Review code changes' => 'CodeReviewer',
+      'Exit' => 'Exit'
     }
 
     user_input = prompt.select('What would you like to do?', operation_types.keys)
+    exit_gracefully if user_input == 'Exit'
     puts "\nStarting the #{operation_types[user_input]}...".yellow
     @generator = Object.const_get(operation_types[user_input]).new
   end
