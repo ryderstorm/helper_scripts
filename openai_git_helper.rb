@@ -4,7 +4,7 @@
 =begin
 ===============================================================================
 This script is designed to interact with the OpenAI API to assist with
-various Git tasks. It leverages the capabilities of OpenAI's GPT model to
+various Git tasks. It leverages the capabilities of OpenAI GPT model to
 generate commit messages, pull request descriptions, and code reviews based
 on the changes made in your codebase.
 
@@ -39,12 +39,12 @@ Requirements:
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!! IMPORTANT !!! IMPORTANT !!! IMPORTANT !!! IMPORTANT !!! IMPORTANT !!!
 This script sends your staged changes to the OpenAI API.
-That means that your staged changes will be sent to OpenAI's servers.
+That means that your staged changes will be sent to OpenAI servers.
 Be careful not to run this script on any sensitive data.
 Make sure you are complying with the rules and terms of use for
 the codebase you are working on.
 
-Review OpenAI's Terms of Use at https://openai.com/policies/terms-of-use
+Review OpenAI Terms of Use at https://openai.com/policies/terms-of-use
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ===============================================================================
 =end
@@ -75,7 +75,8 @@ require 'time'
 module Constants
   # OpenAI API Configuration
   OPENAI_URL = 'https://api.openai.com/v1/chat/completions'
-  OPENAI_API_KEY = ENV.fetch('OPENAI_API_KEY', nil)
+  # OPENAI_API_KEY = ENV.fetch('OPENAI_API_KEY_PERSONAL', nil)
+  OPENAI_API_KEY = ENV.fetch('GIT_SCRIBE_KEY', nil)
   OPENAI_MODEL = ENV.fetch('OPENAI_MODEL', nil)
 
   # Commit Message Generation
@@ -185,7 +186,7 @@ class ChatGPTGenerator
               :model, :prompt, :response, :response_obj
 
   def initialize(_args = nil)
-    @api_key = ENV.fetch('OPENAI_API_KEY', nil)
+    @api_key = ENV.fetch('GIT_SCRIBE_KEY', nil)
     @model = ENV.fetch('OPENAI_MODEL', nil)
     puts "Using OpenAI Model: #{@model.blue}"
     @prompt = TTY::Prompt.new
@@ -532,8 +533,8 @@ class CodeReviewer < ChatGPTGenerator
 
   def prompt_for_code_source
     review_actions = {
-      'Current changes' => method(:set_changes_from_local),
       'Staged changes' => method(:set_changes_from_staged),
+      'Current changes' => method(:set_changes_from_local),
       'Changes between branches' => method(:set_changes_from_branches),
       'Specific commit' => method(:set_changes_from_commit)
     }
