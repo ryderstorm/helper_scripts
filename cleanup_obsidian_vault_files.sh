@@ -1,0 +1,146 @@
+#!/bin/bash
+
+#===============================================================================
+# This script is used to clean up and organize files in this Obsidian vault.
+# It does the following:
+# - Moves all Daily notes to the Dailies folder
+# - Deletes any empty files titled "Untitled*"
+# - Moves any images or attachments to the Attachments folder
+# - Find any remaining files that are empty
+#===============================================================================
+
+set -euo pipefail
+
+#===============================================================================
+# Variables
+#===============================================================================
+
+export BLACK='\033[0;30m'
+export WHITE='\033[1;37m'
+export RED='\033[0;31m'
+export ORANGE='\033[0;33m'
+export YELLOW='\033[1;33m'
+export GREEN='\033[0;32m'
+export BLUE='\033[0;34m'
+export CYAN='\033[0;36m'
+export PURPLE='\033[0;35m'
+export NC='\033[0m'
+export SPACER="\n${WHITE}====================================================${NC}\n"
+
+#===============================================================================
+# Functions
+#===============================================================================
+
+function verify_vault_dir {
+  # check that the vault directory env is set
+  if [ -z "${VAULT_DIR}" ]; then
+    echo -e "${RED}Error: The VAULT_DIR environment variable is not set.${NC}"
+    return 1
+  fi
+  # check that the vault directory exists
+  if [ ! -d "${VAULT_DIR}" ]; then
+    echo -e "${RED}Error: The VAULT_DIR directory does not exist.${NC}"
+    return 1
+  fi
+}
+
+function move_daily_notes() {
+  echo -e "${SPACER}"
+  mkdir -p Dailies
+  # Find any files with a name that matches the format "2024-07-01, Thursday.md"
+  # and are not in the Dailies folder
+  daily_files=$(find . -maxdepth 1 -type f -name "????-??-??, *.md" | sort)
+  if [ -z "$daily_files" ]; then
+    echo -e "${GREEN}No Daily need to be moved.${NC}"
+  else
+    daily_files_count=$(echo "$daily_files" | wc -l)
+    echo -e "${YELLOW}$daily_files${NC}"
+    echo -e "${RED}\nFound $daily_files_count Daily notes.\n${NC}"
+    if gum confirm "Move these files to the Dailies folder?"; then
+      find . -maxdepth 1 -type f -name "????-??-??, *.md" -exec mv -v {} Dailies \;
+    else
+      echo -e "${YELLOW}Daily notes were not moved.${NC}"
+    fi
+  fi
+}
+
+function delete_untitled_files() {
+  echo -e "${SPACER}"
+  # Find any files with a name that starts with "Untitled" and has no content
+  untitled_files=$(find . -maxdepth 1 -type f -name "Untitled*" -empty | sort)
+  if [ -z "$untitled_files" ]; then
+    echo -e "${GREEN}No empty files found.${NC}"
+  else
+    untitled_files_count=$(echo "$untitled_files" | wc -l)
+    echo -e "${YELLOW}$untitled_files${NC}"
+    echo -e "${RED}\nFound $untitled_files_count empty files titled 'Untitled*'.\n${NC}"
+    if gum confirm "Delete these files?"; then
+      find . -maxdepth 1 -type f -name "Untitled*" -empty -exec rm -v {} \;
+
+    else
+      echo -e "${YELLOW}Files were not deleted.${NC}"
+    fi
+  fi
+}
+
+function move_attachments() {
+  echo -e "${SPACER}"
+  mkdir -p Attachments
+  # find all files that are:
+  # - not markdown files
+  # - not this script
+  # - in the same directory as this script
+  attachment_files=$(find .  -maxdepth 1 -type f -not -name "*.md" -not -name "$(basename "$0" 2>/dev/null)" | sort)
+  if [ -z "$attachment_files" ]; then
+    echo -e "${GREEN}No attachments need to be moved.${NC}"
+  else
+    attachment_files_count=$(echo "$attachment_files" | wc -l)
+    echo -e "${YELLOW}$attachment_files${NC}"
+    echo -e "${RED}\nFound $attachment_files_count attachments.\n${NC}"
+    if gum confirm "Move these files to the Attachments folder?"; then
+      find . -maxdepth 1 -type f -not -name "*.md" -not -name "$(basename "$0" 2>/dev/null)" -exec mv -v {} Attachments \;
+    else
+      echo -e "${YELLOW}Attachments were not moved.${NC}"
+    fi
+  fi
+}
+
+function find_empty_files() {
+  echo -e "${SPACER}"
+  # Find any files that are empty
+  find_command_base="find . -maxdepth 2 -type f -empty"
+  empty_files=$(eval "$find_command_base | sort")
+  if [ -z "$empty_files" ]; then
+    echo -e "${GREEN}No empty files found.${NC}"
+  else
+    empty_files_count=$(echo "$empty_files" | wc -l)
+    echo -e "${RED}\nFound $empty_files_count empty files:\n${YELLOW}$empty_files${NC}"
+    if gum confirm "Delete these files?"; then
+      echo -e "${RED}Deleting empty files...${NC}"
+      if eval "$find_command_base -exec rm -v {} \;"; then
+        echo -e "${GREEN}Files were deleted.${NC}"
+      else
+        echo -e "${RED}Error deleting files.${NC}"
+      fi
+    else
+      echo -e "${YELLOW}Files were not deleted.${NC}"
+    fi
+  fi
+}
+
+#===============================================================================
+# Main
+#===============================================================================
+
+echo -e "${SPACER}Running cleanup script in Obsidian vault: ${BLUE}${VAULT_DIR}${NC}"
+if ! verify_vault_dir; then
+  echo -e "${RED}Exiting script.${NC}"
+fi
+pushd "${VAULT_DIR}" > /dev/null || exit 0
+delete_untitled_files
+move_daily_notes
+move_attachments
+find_empty_files
+popd > /dev/null || exit 0
+
+echo -e "${SPACER}Cleanup complete.${NC}"
